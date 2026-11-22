@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Tolk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: rustig, functioneel gereedschap
+   IDEA: tolkcabine – wat je zegt, en wat de ander hoort
+   PICTURE: het vertaalvlak / gesprekslog zelf
+   COLOUR and TYPE: zwart/wit + mint, personen in eigen kleur; Space Grotesk + Inter
+   LAYOUT: tabs, bediening, groot tekstvlak, sprekersknoppen onderaan */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#0c0d0e);--ink:light-dark(#111,#f2f2f2);--mut:light-dark(#6b6f73,#9aa0a6);--line:light-dark(#e4e6e8,#26292c);--mint:#b8f5d0;--mintink:light-dark(#0c3a22,#b8f5d0);--field:light-dark(#b8f5d0,#11251a);--soft:light-dark(#f4f5f6,#16181a)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
+h1{font:700 clamp(28px,4vw,40px)/1.05 "Space Grotesk",sans-serif;margin:0}
+.wrap{max-width:1240px;margin:0 auto;padding:clamp(18px,3vw,40px) max(4vw,16px)}
+.head{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-bottom:18px}
+.tabs{display:flex;gap:4px;background:var(--soft);padding:4px;border-radius:12px}
+.tabs button{border:0;background:transparent}
+.tabs button[aria-selected=true]{background:var(--bg);box-shadow:0 1px 3px #0002;font-weight:600}
+.top{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:14px}
+label{display:grid;gap:4px;font-size:13px;color:var(--mut)}
+select,button{font:500 16px Inter,sans-serif;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:0 12px}
+button{cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #3bbf7a;outline-offset:2px}
+.swap{width:44px;padding:0;font-size:18px}
+.mic{background:#111;color:#fff;border-color:#111;padding:0 22px;font-weight:600;display:flex;gap:10px;align-items:center}
+:root[data-theme=dark] .mic{background:var(--mint);color:#0c3a22;border-color:var(--mint)}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .mic{background:var(--mint);color:#0c3a22;border-color:var(--mint)}}
+.dot{width:10px;height:10px;border-radius:50%;background:currentColor;opacity:.5;flex:none}
+.on .dot{background:#e8452c;opacity:1;animation:p 1.2s infinite}
+@keyframes p{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.on .dot{animation:none}}
+.panes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:14px}
+.pane{border:1px solid var(--line);border-radius:16px;padding:18px 20px;min-height:340px;max-height:62vh;overflow-y:auto;display:flex;flex-direction:column}
+.pane.out{background:var(--field);border-color:transparent;color:var(--mintink)}
+.ph{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--mut);margin-bottom:10px}
+.out .ph{color:inherit;opacity:.8}
+.ph button{min-height:36px;font-size:14px;padding:0 10px;background:transparent;color:inherit;border-color:currentColor}
+.txt p{margin:0 0 10px}
+.src .txt{font-size:17px}
+.out .txt{font:500 clamp(20px,2.6vw,28px)/1.35 "Space Grotesk",sans-serif}
+.out .txt p:last-child{font-weight:700}
+.interim{color:var(--mut);font-style:italic}
+.empty{color:var(--mut);margin:auto 0;font-size:15px;text-align:center}
+.out .empty{color:inherit;opacity:.7}
+.opts{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px;align-items:center}
+.opts label{display:flex;flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px;min-height:44px}
+.opts input{width:20px;height:20px;accent-color:#3bbf7a}
+.status{font-size:14px;color:var(--mut);margin-left:auto}
+.warn{background:#fff3cd;color:#5c4400;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:none;font-size:15px}
+[hidden]{display:none!important}
+/* gesprek */
+.people{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+.person{display:flex;gap:6px;align-items:end;padding:6px 6px 6px 12px;border-radius:12px;background:var(--soft);border-left:6px solid var(--c)}
+.person .x{width:36px;min-height:36px;padding:0;border:0;background:transparent;color:var(--mut);font-size:20px}
+.log{border:1px solid var(--line);border-radius:16px;padding:16px;min-height:340px;max-height:58vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:min(720px,92%);border-radius:14px;padding:10px 14px;background:var(--soft);border-left:6px solid var(--c)}
+.msg.r{align-self:flex-end}
+.who{font-size:13px;color:var(--mut);display:flex;gap:8px;justify-content:space-between}
+.orig{font-size:15px;color:var(--mut);margin:2px 0 6px}
+.tr{font:500 clamp(18px,2.2vw,24px)/1.35 "Space Grotesk",sans-serif;margin:0}
+.tr small{font:600 12px Inter,sans-serif;color:var(--mut);margin-right:6px}
+.live{font-style:italic;color:var(--mut)}
+.speakers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:10px;margin-top:12px}
+.spk{min-height:64px;border:0;border-radius:14px;background:var(--c);color:#111;font-weight:600;font-size:17px;display:flex;align-items:center;justify-content:center;gap:10px}
+.spk.on{box-shadow:0 0 0 4px var(--bg),0 0 0 7px var(--c)}
+.spk .dot{background:#111}
+/* tegenover elkaar */
+.facing{display:grid;grid-template-rows:1fr 1fr;gap:10px;height:min(78vh,900px)}
+.half{border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--soft);border:3px solid var(--c);overflow:hidden}
+.rsetup{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:14px}
+.card{border:1px solid var(--line);border-radius:16px;padding:18px;display:grid;gap:12px;align-content:start}
+.card h2{font:700 20px/1.2 "Space Grotesk",sans-serif;margin:0}
+.card p{margin:0;color:var(--mut);font-size:15px}
+input[type=text]{font:500 16px Inter,sans-serif;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:0 12px;width:100%}
+.codebig{font:700 clamp(34px,6vw,52px)/1 "Space Grotesk",sans-serif;letter-spacing:.08em;margin:4px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}
+.rhalves{display:grid;grid-template-rows:minmax(0,1.3fr) minmax(0,1fr);gap:10px;height:min(76vh,900px)}
+.line .sub{display:block;font:400 14px Inter,sans-serif;color:var(--mut);margin-top:2px}
+.pill{display:inline-flex;align-items:center;gap:8px;font-size:14px;padding:4px 12px;border-radius:99px;background:var(--soft)}
+.pill i{width:9px;height:9px;border-radius:50%;background:#999}.pill.ok i{background:#2fa866}.pill.bad i{background:#e8452c}
+.half .lines{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.half .line{font:500 clamp(18px,2.4vw,26px)/1.3 "Space Grotesk",sans-serif;margin:0}
+.half .line.mine{font:400 15px Inter,sans-serif;color:var(--mut);text-align:right}
+@media(max-width:700px){.panes{grid-template-columns:1fr}.pane{min-height:200px;max-height:none}.out{order:-1}.status{margin-left:0;width:100%}.log{max-height:none;min-height:260px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Live Tolk</h1>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabConv" aria-selected="true">Gesprek</button>
+      <button role="tab" id="tabRemote" aria-selected="false">Op afstand</button>
+      <button role="tab" id="tabTalk" aria-selected="false">Toespraak</button>
+    </div>
+  </div>
+  <div class="warn" id="warn"></div>
+
+  <!-- GESPREK -->
+  <section id="conv">
+    <div class="people" id="people"></div>
+    <div class="opts">
+      <button id="addP">+ Persoon</button>
+      <label><input type="checkbox" id="auto" checked> Beurt automatisch naar de ander</label>
+      <label><input type="checkbox" id="cSpeak" checked> Vertaling voorlezen</label>
+      <label><input type="checkbox" id="face"> Tegenover elkaar (scherm in tweeën)</label>
+    </div>
+    <div id="normal">
+      <div class="log" id="log"></div>
+      <div class="speakers" id="speakers"></div>
+    </div>
+    <div class="facing" id="facing" hidden></div>
+    <div class="opts">
+      <button id="cStop">Stop luisteren</button>
+      <button id="cCopy">Kopieer gesprek</button>
+      <button id="cClear">Wis gesprek</button>
+      <span class="status" id="cStatus">Kies talen en druk op een sprekersknop</span>
+    </div>
+  </section>
+
+  <!-- OP AFSTAND -->
+  <section id="remote" hidden>
+    <div id="rSetup">
+      <div class="top">
+        <label>Mijn naam<input type="text" id="rName" maxlength="30" placeholder="Bijv. Jan"></label>
+        <label>Mijn taal<select id="rLang"></select></label>
+      </div>
+      <div class="rsetup">
+        <div class="card">
+          <h2>Nieuw gesprek starten</h2>
+          <p>Je krijgt een code. Geef die door aan je gesprekspartner (bijv. via WhatsApp of telefoon).</p>
+          <button class="mic" id="rNew"><span class="dot"></span>Maak gesprekscode</button>
+          <div id="rCodeBox" hidden><p>Gesprekscode</p><div class="codebig" id="rCode"></div><p>Wachten tot de ander deelneemt…</p></div>
+        </div>
+        <div class="card">
+          <h2>Deelnemen aan gesprek</h2>
+          <p>Vul de code in die je van de ander hebt gekregen.</p>
+          <div class="row"><input type="text" id="rJoinCode" maxlength="6" placeholder="Code" autocapitalize="characters" autocomplete="off"><button id="rJoin">Deelnemen</button></div>
+        </div>
+      </div>
+    </div>
+    <div id="rChat" hidden>
+      <div class="opts" style="margin:0 0 10px">
+        <span class="pill" id="rState"><i></i><span>Verbinden…</span></span>
+        <label><input type="checkbox" id="rSpeak" checked> Vertaling voorlezen</label>
+        <button id="rLeave" style="margin-left:auto">Gesprek beëindigen</button>
+      </div>
+      <div class="rhalves">
+        <div class="half" style="--c:#a9d4ff" id="rTop"><div class="ph" style="margin:0"><span id="rOtherLbl">Gesprekspartner</span></div><div class="lines" id="rTheirs"></div></div>
+        <div class="half" style="--c:#b8f5d0"><div class="ph" style="margin:0"><span id="rMeLbl">Ik</span></div><div class="lines" id="rMine"></div><button class="spk" id="rMic" style="--c:#b8f5d0"><span class="dot"></span><span>Microfoon aan</span></button></div>
+      </div>
+    </div>
+    <p class="status" id="rStatus" style="margin-top:10px"></p>
+  </section>
+
+  <!-- TOESPRAAK -->
+  <section id="talk" hidden>
+    <div class="top">
+      <label>Ik spreek<select id="from"></select></label>
+      <button class="swap" id="swap" aria-label="Talen omwisselen">⇄</button>
+      <label>Vertaal naar<select id="to"></select></label>
+      <button class="mic" id="mic"><span class="dot"></span><span id="micTxt">Start</span></button>
+    </div>
+    <div class="panes">
+      <section class="pane src"><div class="ph"><span>Gesproken</span></div><div class="txt" id="srcTxt"></div></section>
+      <section class="pane out"><div class="ph"><span>Vertaling</span><span><button id="copy">Kopieer</button> <button id="clear">Wis</button></span></div><div class="txt" id="outTxt"></div></section>
+    </div>
+    <div class="opts">
+      <label><input type="checkbox" id="speak"> Vertaling voorlezen</label>
+      <label><input type="checkbox" id="big"> Grote letters</label>
+      <span class="status" id="status">Klaar</span>
+    </div>
+  </section>
+</div>
+<script>
+{
+const LANGS=[["nl-NL","Nederlands"],["en-GB","Engels"],["de-DE","Duits"],["fr-FR","Frans"],["es-ES","Spaans"],["it-IT","Italiaans"],["pt-PT","Portugees"],["pl-PL","Pools"],["ro-RO","Roemeens"],["bg-BG","Bulgaars"],["uk-UA","Oekraïens"],["ru-RU","Russisch"],["tr-TR","Turks"],["ar-SA","Arabisch"],["fa-IR","Perzisch"],["ti-ER","Tigrinya"],["so-SO","Somalisch"],["zh-CN","Chinees"],["hi-IN","Hindi"],["id-ID","Indonesisch"]];
+const COLORS=["#b8f5d0","#ffd98a","#a9d4ff","#f6b3c8"];
+const $=id=>document.getElementById(id);
+const code=v=>v.split("-")[0];
+const name=v=>(LANGS.find(l=>l[0]===v)||[v,v])[1];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const opts=sel=>LANGS.map(([c,n])=>`<option value="${c}"${c===sel?" selected":""}>${n}</option>`).join("");
+const warn=t=>{$("warn").textContent=t;$("warn").style.display="block"};
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(!SR)warn("Deze browser ondersteunt geen spraakherkenning. Gebruik Google Chrome of Microsoft Edge.");
+
+let store={};try{store=JSON.parse(localStorage.getItem("livetolk2")||"{}")}catch(e){}
+const save=()=>{try{localStorage.setItem("livetolk2",JSON.stringify(store))}catch(e){}};
+
+/* ---------- vertalen ---------- */
+const locals={};
+async function getLocal(a,b){
+  if(!("Translator" in self))return null;
+  const k=a+">"+b;if(k in locals)return locals[k];
+  try{const av=await Translator.availability({sourceLanguage:a,targetLanguage:b});
+    locals[k]=av==="unavailable"?null:await Translator.create({sourceLanguage:a,targetLanguage:b});}catch(e){locals[k]=null}
+  return locals[k];
+}
+async function viaGoogle(t,a,b){
+  const r=await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${a}&tl=${b}&dt=t&q=${encodeURIComponent(t)}`);
+  if(!r.ok)throw 0;const j=await r.json();return j[0].map(x=>x[0]).join("");
+}
+async function viaMyMemory(t,a,b){
+  const r=await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(t)}&langpair=${a}|${b}`);
+  const j=await r.json();if(j.responseStatus!=200)throw 0;return j.responseData.translatedText;
+}
+async function translate(t,from,to){
+  const a=code(from),b=code(to);if(a===b)return t;
+  const l=await getLocal(a,b);if(l){try{return await l.translate(t)}catch(e){}}
+  try{return await viaGoogle(t,a,b)}catch(e){}
+  try{return await viaMyMemory(t,a,b)}catch(e){}
+  return "⚠ Vertalen mislukt (geen internet?)";
+}
+function say(t,lang){
+  return new Promise(res=>{
+    if(!("speechSynthesis" in window))return res();
+    const u=new SpeechSynthesisUtterance(t);u.lang=lang;
+    const v=speechSynthesis.getVoices().find(v=>v.lang.replace("_","-").toLowerCase().startsWith(code(lang)));
+    if(v)u.voice=v;u.onend=u.onerror=()=>res();speechSynthesis.speak(u);
+    setTimeout(res,Math.max(4000,t.length*120));
+  });
+}
+
+/* ---------- tabs ---------- */
+let stopAll=()=>{};
+const TABS={conv:"tabConv",remote:"tabRemote",talk:"tabTalk"};
+function tab(n){
+  stopAll();
+  for(const k in TABS){$(TABS[k]).setAttribute("aria-selected",k===n);$(k).hidden=k!==n}
+  store.tab=n;save();
+}
+for(const k in TABS)$(TABS[k]).onclick=()=>tab(k);
+
+/* ---------- GESPREK ---------- */
+let people=store.people||[{lang:"nl-NL"},{lang:"en-GB"}];
+let log=[],active=-1,rec=null,liveText="",busy=false;
+const cStatus=t=>$("cStatus").textContent=t;
+const label=i=>`Persoon ${i+1} · ${name(people[i].lang)}`;
+const textFor=(e,lang)=>code(e.lang)===code(lang)?e.text:(e.tr[code(lang)]??"…");
+
+function renderPeople(){
+  $("people").innerHTML=people.map((p,i)=>`<div class="person" style="--c:${COLORS[i]}"><label>Persoon ${i+1}<select data-i="${i}">${opts(p.lang)}</select></label>${people.length>2?`<button class="x" data-x="${i}" aria-label="Verwijder persoon ${i+1}">×</button>`:""}</div>`).join("");
+  $("addP").hidden=people.length>=4;
+  $("auto").parentElement.style.opacity=people.length===2?1:.45;
+  $("face").parentElement.style.opacity=people.length===2?1:.45;
+  store.people=people;save();renderConv();
+}
+$("people").addEventListener("change",e=>{const i=+e.target.dataset.i;people[i].lang=e.target.value;renderPeople()});
+$("people").addEventListener("click",e=>{if(e.target.dataset.x!==undefined){stopListen();people.splice(+e.target.dataset.x,1);renderPeople()}});
+$("addP").onclick=()=>{const used=people.map(p=>p.lang);people.push({lang:LANGS.find(l=>!used.includes(l[0]))[0]});renderPeople()};
+
+function micBtn(i){
+  const on=active===i;
+  return `<button class="spk${on?" on":""}" data-s="${i}" style="--c:${COLORS[i]}"><span class="dot"></span>${on?"Luistert… (tik = stop)":"Spreek "+esc(name(people[i].lang))}</button>`;
+}
+function renderConv(){
+  const facing=$("face").checked&&people.length===2;
+  $("normal").hidden=facing;$("facing").hidden=!facing;
+  if(facing){
+    $("facing").innerHTML=[1,0].map(i=>{
+      const L=people[i].lang;
+      const lines=log.map(e=>`<p class="line${e.p===i?" mine":""}">${esc(textFor(e,L))}</p>`).join("")+(active>=0&&liveText?`<p class="line live${active===i?" mine":""}">${esc(liveText)}</p>`:"");
+      return `<div class="half" style="--c:${COLORS[i]}"><div class="lines">${lines||`<p class="empty">${esc(label(i))}</p>`}</div>${micBtn(i)}</div>`;
+    }).join("");
+    document.querySelectorAll(".half .lines").forEach(l=>l.scrollTop=1e9);
+  }else{
+    const langs=[...new Set(people.map(p=>code(p.lang)))];
+    $("log").innerHTML=log.length||liveText?log.map(e=>{
+      const others=langs.filter(c=>c!==code(e.lang));
+      return `<div class="msg${e.p%2?" r":""}" style="--c:${COLORS[e.p]}"><div class="who"><span>${esc(e.who)}</span><span>${e.time}</span></div><p class="orig">${esc(e.text)}</p>${others.map(c=>`<p class="tr">${others.length>1?`<small>${c.toUpperCase()}</small>`:""}${esc(e.tr[c]??"…")}</p>`).join("")}</div>`;
+    }).join("")+(liveText?`<div class="msg live${active%2?" r":""}" style="--c:${COLORS[active]}">${esc(liveText)}</div>`:""):`<p class="empty">Tik op je eigen knop en begin te praten.<br>Iedereen ziet de vertaling in zijn eigen taal.</p>`;
+    $("log").scrollTop=1e9;
+    $("speakers").innerHTML=people.map((p,i)=>micBtn(i)).join("");
+  }
+}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-s]");if(!b)return;const i=+b.dataset.s;active===i?stopListen():listen(i)});
+
+function stopListen(){active=-1;liveText="";if(rec){rec.onend=null;rec.onresult=null;try{rec.abort()}catch(e){}rec=null}renderConv();cStatus("Gestopt")}
+function listen(i){
+  if(!SR)return;
+  if(rec){rec.onend=null;rec.onresult=null;try{rec.abort()}catch(e){}}
+  speechSynthesis.cancel();
+  active=i;liveText="";let finalText="";
+  rec=new SR();rec.lang=people[i].lang;rec.continuous=false;rec.interimResults=true;
+  rec.onresult=e=>{let it="";finalText="";for(const r of e.results){if(r.isFinal)finalText+=r[0].transcript;else it+=r[0].transcript}liveText=(finalText+" "+it).trim();renderConv()};
+  rec.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){warn("Geen toegang tot de microfoon. Sta de microfoon toe (slotje in de adresbalk) en probeer opnieuw.");stopListen()}};
+  rec.onend=()=>{rec=null;const t=finalText.trim();if(t){handleTurn(i,t)}else if(active===i){listen(i)}};
+  try{rec.start();cStatus(label(i)+" – luistert")}catch(e){cStatus("Kon niet starten")}
+  renderConv();
+}
+async function handleTurn(i,text){
+  const p=people[i],d=new Date();
+  const e={p:i,lang:p.lang,who:label(i),text,tr:{},time:d.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"})};
+  log.push(e);liveText="";active=-1;renderConv();cStatus("Vertalen…");
+  const targets=[...new Set(people.map(q=>q.lang).filter(l=>code(l)!==code(p.lang)))];
+  await Promise.all(targets.map(async l=>{e.tr[code(l)]=await translate(text,p.lang,l);renderConv()}));
+  if($("cSpeak").checked){for(const l of targets){cStatus("Voorlezen…");await say(e.tr[code(l)],l)}}
+  if($("auto").checked&&people.length===2&&active===-1){listen(1-i)}else if(active===-1)cStatus("Klaar – tik op een knop");
+}
+$("cStop").onclick=()=>{speechSynthesis.cancel();stopListen()};
+$("auto").onchange=$("cSpeak").onchange=()=>{store.auto=$("auto").checked;store.cSpeak=$("cSpeak").checked;save()};
+$("face").onchange=()=>{store.face=$("face").checked;save();renderConv()};
+$("cClear").onclick=()=>{log=[];renderConv()};
+$("cCopy").onclick=async()=>{const t=log.map(e=>`${e.time} ${e.who}: ${e.text}\n`+Object.entries(e.tr).map(([c,v])=>`  [${c}] ${v}`).join("\n")).join("\n");try{await navigator.clipboard.writeText(t);cStatus("Gekopieerd")}catch(x){cStatus("Kopiëren niet toegestaan")}};
+if("auto" in store)$("auto").checked=store.auto;if("cSpeak" in store)$("cSpeak").checked=store.cSpeak;$("face").checked=!!store.face;
+
+/* ---------- TOESPRAAK ---------- */
+const from=$("from"),to=$("to"),mic=$("mic");
+from.innerHTML=opts(store.from||"nl-NL");to.innerHTML=opts(store.to||"en-GB");$("speak").checked=!!store.speak;
+let tRec=null,running=false,srcLines=[],outLines=[],interim="",queue=Promise.resolve();
+const status=t=>$("status").textContent=t;
+function renderTalk(){
+  $("srcTxt").innerHTML=srcLines.length||interim?srcLines.map(l=>`<p>${esc(l)}</p>`).join("")+(interim?`<p class="interim">${esc(interim)}</p>`:""):`<p class="empty">Druk op Start en begin te praten.</p>`;
+  $("outTxt").innerHTML=outLines.length?outLines.map(l=>`<p>${esc(l)}</p>`).join(""):`<p class="empty">Hier verschijnt de vertaling.</p>`;
+  $("srcTxt").parentElement.scrollTop=1e9;$("outTxt").parentElement.scrollTop=1e9;
+}
+function finalTalk(text){
+  text=text.trim();if(!text)return;srcLines.push(text);const i=outLines.push("…")-1;renderTalk();
+  const f=from.value,t=to.value;
+  queue=queue.then(async()=>{const tr=await translate(text,f,t);outLines[i]=tr;renderTalk();if($("speak").checked)say(tr,t)});
+}
+function startTalk(){
+  if(!SR)return;
+  tRec=new SR();tRec.lang=from.value;tRec.continuous=true;tRec.interimResults=true;
+  tRec.onresult=e=>{interim="";for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];if(r.isFinal)finalTalk(r[0].transcript);else interim+=r[0].transcript}renderTalk()};
+  tRec.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){running=false;uiTalk();warn("Geen toegang tot de microfoon. Sta de microfoon toe (slotje in de adresbalk) en probeer opnieuw.")}};
+  tRec.onend=()=>{if(running){try{tRec.start()}catch(e){}}else{interim="";renderTalk()}};
+  try{tRec.start();running=true;uiTalk();status("Luistert…")}catch(e){status("Kon niet starten")}
+}
+function stopTalk(){running=false;if(tRec)tRec.stop();uiTalk();status("Gestopt")}
+function uiTalk(){mic.classList.toggle("on",running);$("micTxt").textContent=running?"Stop":"Start"}
+mic.onclick=()=>running?stopTalk():startTalk();
+const saveTalk=()=>{store.from=from.value;store.to=to.value;store.speak=$("speak").checked;save()};
+const restart=()=>{saveTalk();if(running){running=false;tRec.onend=null;tRec.stop();setTimeout(startTalk,250)}};
+from.onchange=restart;to.onchange=saveTalk;$("speak").onchange=saveTalk;
+$("swap").onclick=()=>{const f=from.value;from.value=to.value;to.value=f;restart()};
+$("clear").onclick=()=>{srcLines=[];outLines=[];interim="";renderTalk()};
+$("copy").onclick=async()=>{try{await navigator.clipboard.writeText(outLines.join("\n"));status("Gekopieerd")}catch(e){status("Kopiëren niet toegestaan")}};
+$("big").onchange=e=>{$("outTxt").style.fontSize=e.target.checked?"clamp(28px,4.5vw,48px)":""};
+
+/* ---------- OP AFSTAND ---------- */
+const R={peer:null,conn:null,other:null,rec:null,on:false,speaking:false,mine:[],theirs:[],live:"",q:Promise.resolve()};
+$("rLang").innerHTML=opts(store.rLang||"nl-NL");$("rName").value=store.rName||"";
+const rLang=()=>$("rLang").value,rName=()=>$("rName").value.trim()||"Ik";
+const rStatus=t=>$("rStatus").textContent=t;
+$("rLang").onchange=$("rName").oninput=()=>{store.rLang=rLang();store.rName=$("rName").value;save()};
+function loadPeer(){
+  if(window.Peer)return Promise.resolve();
+  return new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js";sc.onload=res;sc.onerror=()=>rej();document.head.appendChild(sc)});
+}
+const ABC="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const newCode=()=>Array.from({length:6},()=>ABC[Math.floor(Math.random()*ABC.length)]).join("");
+function state(t,c){$("rState").className="pill "+(c||"");$("rState").lastElementChild.textContent=t}
+function peerError(e){
+  const m={"peer-unavailable":"Code niet gevonden. Controleer de code, of laat de ander een nieuwe code maken.","network":"Geen verbinding met de server. Controleer je internet.","browser-incompatible":"Deze browser ondersteunt dit niet."}[e.type]||("Fout: "+e.type);
+  rStatus(m);state("Niet verbonden","bad");
+}
+async function rNew(){
+  try{await loadPeer()}catch(e){return rStatus("Kon de verbindingsmodule niet laden. Controleer je internet.")}
+  rReset();const c=newCode();
+  R.peer=new Peer("livetolk-"+c);
+  R.peer.on("open",()=>{$("rCode").textContent=c;$("rCodeBox").hidden=false;rStatus("")});
+  R.peer.on("connection",conn=>{if(R.conn&&R.conn.open){conn.close();return}setupConn(conn)});
+  R.peer.on("error",e=>{if(e.type==="unavailable-id")return rNew();peerError(e)});
+}
+async function rJoin(){
+  const c=$("rJoinCode").value.trim().toUpperCase();if(c.length<6)return rStatus("Vul de code van 6 tekens in.");
+  try{await loadPeer()}catch(e){return rStatus("Kon de verbindingsmodule niet laden. Controleer je internet.")}
+  rReset();rStatus("Verbinden…");
+  R.peer=new Peer();
+  R.peer.on("open",()=>setupConn(R.peer.connect("livetolk-"+c,{reliable:true})));
+  R.peer.on("error",peerError);
+}
+function send(o){if(R.conn&&R.conn.open)R.conn.send(o)}
+function setupConn(conn){
+  R.conn=conn;showChat(true);state("Verbinden…");
+  conn.on("open",()=>{send({t:"hello",name:rName(),lang:rLang()});state("Verbonden","ok");rStatus("");rMic(true)});
+  conn.on("data",onData);
+  conn.on("close",()=>{state("Verbinding verbroken","bad");rMic(false);rStatus("De ander heeft het gesprek verlaten of de verbinding is weggevallen.")});
+  conn.on("error",()=>state("Verbindingsfout","bad"));
+}
+function onData(d){
+  if(!d||typeof d!=="object")return;
+  if(d.t==="hello"){R.other={name:String(d.name||"Ander").slice(0,30),lang:String(d.lang||"en-GB")};renderR();return}
+  if(d.t==="live"){R.live=String(d.text||"").slice(0,500);renderR();return}
+  if(d.t==="tr"){const m=R.mine.find(x=>x.id===d.id);if(m){m.tr=String(d.text||"");renderR()}return}
+  if(d.t==="msg"){
+    const e={id:d.id,text:String(d.text||"").slice(0,2000),lang:String(d.lang||""),tr:"…"};
+    R.theirs.push(e);R.live="";renderR();
+    R.q=R.q.then(async()=>{
+      e.tr=await translate(e.text,e.lang,rLang());renderR();send({t:"tr",id:e.id,text:e.tr});
+      if($("rSpeak").checked){R.speaking=true;if(R.rec){try{R.rec.abort()}catch(x){}}await say(e.tr,rLang());R.speaking=false;if(R.on)startR()}
+    });
+  }
+}
+function renderR(){
+  const o=R.other;
+  $("rOtherLbl").textContent=o?`${o.name} · spreekt ${name(o.lang)} · jij leest ${name(rLang())}`:"Wachten op gesprekspartner…";
+  $("rMeLbl").textContent=`${rName()} · ${name(rLang())}`;
+  $("rTheirs").innerHTML=R.theirs.map(e=>`<p class="line">${esc(e.tr)}<span class="sub">${esc(e.text)}</span></p>`).join("")+(R.live?`<p class="line live"><span class="sub">${esc(R.live)} …</span></p>`:"")||`<p class="empty">Hier verschijnt wat de ander zegt, vertaald in het ${esc(name(rLang()))}.</p>`;
+  $("rMine").innerHTML=R.mine.map(e=>`<p class="line mine" style="text-align:left">${esc(e.text)}${o?`<span class="sub">De ander leest: ${esc(e.tr)}</span>`:""}</p>`).join("")+(R.myLive?`<p class="line mine live" style="text-align:left">${esc(R.myLive)}</p>`:"")||`<p class="empty">Praat gewoon. Wat je zegt gaat direct naar de ander.</p>`;
+  $("rTheirs").scrollTop=1e9;$("rMine").scrollTop=1e9;
+  $("rMic").classList.toggle("on",R.on);$("rMic").lastElementChild.textContent=R.on?(R.speaking?"Even stil: vertaling wordt voorgelezen":"Luistert… (tik = microfoon uit)"):"Microfoon aan";
+}
+function startR(){
+  if(!SR||R.speaking)return;
+  if(R.rec){R.rec.onend=null;try{R.rec.abort()}catch(e){}}
+  const rec=new SR();R.rec=rec;rec.lang=rLang();rec.continuous=true;rec.interimResults=true;
+  rec.onresult=e=>{let it="";for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];
+      if(r.isFinal){const t=r[0].transcript.trim();if(t){const id=Date.now()+"-"+Math.random().toString(36).slice(2,6);R.mine.push({id,text:t,tr:"…"});send({t:"msg",id,text:t,lang:rLang()})}}
+      else it+=r[0].transcript}
+    R.myLive=it.trim();send({t:"live",text:R.myLive});renderR()};
+  rec.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){R.on=false;warn("Geen toegang tot de microfoon. Sta de microfoon toe en probeer opnieuw.");renderR()}};
+  rec.onend=()=>{R.myLive="";if(R.on&&!R.speaking&&R.rec===rec)setTimeout(()=>{if(R.on&&!R.speaking&&R.rec===rec)startR()},150);renderR()};
+  try{rec.start()}catch(e){}
+  renderR();
+}
+function rMic(on){R.on=on;if(on)startR();else if(R.rec){R.rec.onend=null;try{R.rec.abort()}catch(e){}R.rec=null;R.myLive="";send({t:"live",text:""})}renderR()}
+function showChat(c){$("rSetup").hidden=c;$("rChat").hidden=!c;renderR()}
+function rReset(){rMic(false);try{R.conn&&R.conn.close()}catch(e){}try{R.peer&&R.peer.destroy()}catch(e){}R.peer=R.conn=R.other=null;R.mine=[];R.theirs=[];R.live="";$("rCodeBox").hidden=true}
+$("rNew").onclick=rNew;$("rJoin").onclick=rJoin;
+$("rJoinCode").onkeydown=e=>{if(e.key==="Enter")rJoin()};
+$("rMic").onclick=()=>rMic(!R.on);
+$("rLeave").onclick=()=>{rReset();showChat(false);rStatus("Gesprek beëindigd")};
+
+stopAll=()=>{if(running)stopTalk();if(active>=0||rec)stopListen();if(R.on)rMic(false);try{speechSynthesis.cancel()}catch(e){}};
+renderPeople();renderTalk();
+if(store.tab&&TABS[store.tab])tab(store.tab);
+}
+</script>
+</body>
+</html>
