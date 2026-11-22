@@ -238,15 +238,53 @@ async function translate(t,from,to){
   for(const f of ONLINE){try{return await f(t,a,b)}catch(e){}}
   return "⚠ Vertalen mislukt (geen internet?)";
 }
-function say(t,lang){
+/* Voorlezen. Let op: telefoons laden stemmen pas na een tijdje, Chrome breekt lange
+   zinnen af na ~15 s, en Android laat microfoon en luidspreker niet tegelijk werken.
+   Daarom: wachten op stemmen, tekst in stukjes, en de microfoon eerst echt laten stoppen. */
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const TTS="speechSynthesis" in window;
+let voices=[];
+function loadVoices(){if(TTS)voices=speechSynthesis.getVoices()}
+if(TTS){loadVoices();speechSynthesis.addEventListener("voiceschanged",loadVoices)}
+async function voiceFor(lang){
+  for(let i=0;i<10&&!voices.length;i++){await wait(100);loadVoices()}
+  const norm=v=>v.lang.replace("_","-").toLowerCase(),L=lang.toLowerCase(),c=code(lang);
+  return voices.find(v=>norm(v)===L&&v.localService)||voices.find(v=>norm(v)===L)||voices.find(v=>norm(v).startsWith(c))||null;
+}
+function chunks(t){
+  const out=[];let cur="";
+  for(const part of t.match(/[^.!?;:,]+[.!?;:,]*\s*/g)||[t]){
+    if((cur+part).length>160&&cur){out.push(cur.trim());cur=""}
+    cur+=part;
+  }
+  if(cur.trim())out.push(cur.trim());
+  return out;
+}
+function speakOne(text,lang,voice){
   return new Promise(res=>{
-    if(!("speechSynthesis" in window))return res();
-    const u=new SpeechSynthesisUtterance(t);u.lang=lang;
-    const v=speechSynthesis.getVoices().find(v=>v.lang.replace("_","-").toLowerCase().startsWith(code(lang)));
-    if(v)u.voice=v;u.onend=u.onerror=()=>res();speechSynthesis.speak(u);
-    setTimeout(res,Math.max(4000,t.length*120));
+    const u=new SpeechSynthesisUtterance(text);u.lang=lang;if(voice)u.voice=voice;
+    let done=false;const fin=err=>{if(done)return;done=true;clearInterval(poll);clearTimeout(guard);res(err)};
+    u.onend=()=>fin();u.onerror=e=>fin(e.error);
+    speechSynthesis.speak(u);
+    let started=false;
+    const poll=setInterval(()=>{if(speechSynthesis.speaking)started=true;else if(started)fin()},250);
+    const guard=setTimeout(()=>fin("timeout"),8000+text.length*250);
   });
 }
+let sayStatus=()=>{};
+async function say(t,lang){
+  if(!TTS||!t||t.startsWith("⚠"))return;
+  speechSynthesis.cancel();await wait(250);
+  const v=await voiceFor(lang);
+  if(!v&&voices.length)sayStatus(`Geen stem voor ${name(lang)} op dit apparaat – installeer die taal bij Instellingen › Tekst-naar-spraak.`);
+  for(const part of chunks(t)){
+    const err=await speakOne(part,lang,v);
+    if(err==="not-allowed"){sayStatus("Voorlezen geblokkeerd door de browser. Tik één keer ergens op de pagina.");return}
+    if(err==="interrupted"||err==="canceled")return;
+  }
+}
+/* Mobiele browsers staan geluid pas toe na een tik: gebruik de eerste tik om voorlezen vrij te geven. */
+if(TTS)document.addEventListener("pointerdown",()=>{const u=new SpeechSynthesisUtterance(" ");u.volume=0;speechSynthesis.speak(u)},{once:true});
 const hush=()=>{try{speechSynthesis.cancel()}catch(e){}};
 
 /* ---------- tabs ---------- */
@@ -319,7 +357,7 @@ async function handleTurn(i,text){
   log.push(e);liveText="";active=-1;renderConv();cStatus("Vertalen…");
   const targets=[...new Set(people.map(q=>q.lang).filter(l=>code(l)!==code(p.lang)))];
   await Promise.all(targets.map(async l=>{e.tr[code(l)]=await translate(text,p.lang,l);renderConv()}));
-  if(cSpeak())for(const l of targets){cStatus("Voorlezen…");await say(e.tr[code(l)],l)}
+  if(cSpeak()){sayStatus=cStatus;for(const l of targets){if(active!==-1)return;cStatus("Voorlezen…");await say(e.tr[code(l)],l)}await wait(300)}
   if(active!==-1)return;
   if(cAuto()&&people.length===2)listen(1-i);else cStatus("Klaar – tik op een knop");
 }
@@ -380,8 +418,8 @@ function onData(d){
     R.q=R.q.then(async()=>{
       e.tr=await translate(e.text,e.lang,rLang());renderR();send({t:"tr",id:e.id,text:e.tr});
       if(!rSpeak())return;
-      R.speaking=true;killRec(R.rec);R.rec=null;renderR();
-      await say(e.tr,rLang());
+      R.speaking=true;killRec(R.rec);R.rec=null;R.myLive="";renderR();
+      sayStatus=rStatus;await wait(300);await say(e.tr,rLang());await wait(300);
       R.speaking=false;if(R.on)startR();else renderR();
     });
   }
@@ -425,7 +463,7 @@ $("rLeave").onclick=()=>{rReset();showChat(false);rStatus("Gesprek beëindigd")}
 /* ---------- TOESPRAAK (één spreker, doorlopend) ---------- */
 const from=$("from"),to=$("to"),tStatus=statusOf("tStatus"),tSpeak=persist("tSpeak",false);
 from.innerHTML=opts(store.from||"nl-NL");to.innerHTML=opts(store.to||"en-GB");
-let tRec=null,running=false,srcLines=[],outLines=[],interim="",tQueue=Promise.resolve();
+let tRec=null,running=false,tPaused=false,srcLines=[],outLines=[],interim="",tQueue=Promise.resolve();
 function renderTalk(){
   $("srcTxt").innerHTML=srcLines.map(l=>`<p>${esc(l)}</p>`).join("")+(interim?`<p class="live">${esc(interim)}</p>`:"")||emptyHTML("Druk op Start en begin te praten.");
   $("outTxt").innerHTML=outLines.map(l=>`<p>${esc(l)}</p>`).join("")||emptyHTML("Hier verschijnt de vertaling.");
@@ -434,14 +472,20 @@ function renderTalk(){
 function finalTalk(text){
   srcLines.push(text);const i=outLines.push("…")-1;
   const f=from.value,t=to.value;
-  tQueue=tQueue.then(async()=>{outLines[i]=await translate(text,f,t);renderTalk();if(tSpeak())say(outLines[i],t)});
+  tQueue=tQueue.then(async()=>{
+    outLines[i]=await translate(text,f,t);renderTalk();
+    if(!tSpeak())return;
+    const wasOn=running;if(wasOn){tPaused=true;killRec(tRec);tRec=null}
+    sayStatus=tStatus;tStatus("Voorlezen…");await wait(300);await say(outLines[i],t);await wait(300);
+    tPaused=false;if(wasOn&&running){startTalk()}
+  });
 }
 function startTalk(){
   killRec(tRec);
   tRec=makeRec(from.value,true,{
     onFinal:finalTalk,
     onInterim:it=>{interim=it;renderTalk()},
-    onEnd:()=>{interim="";renderTalk();if(running)startTalk()},
+    onEnd:()=>{interim="";renderTalk();if(running&&!tPaused)startTalk()},
     onDenied:stopTalk
   });
   running=!!tRec;uiTalk();if(running)tStatus("Luistert…");
