@@ -588,7 +588,7 @@ $("keepClear").onclick=()=>{
 /* ---------- bewaren: naar GitHub via tussenstation ----------
    De app kent geen GitHub-sleutel. Zinnen gaan naar een Cloudflare Worker (zie worker/worker.js),
    die ze in de privé-repository zet. Vul hieronder het adres van die Worker in. */
-const WORKER_URL="";
+const WORKER_URL="https://live-tolk.gkorpershoek.workers.dev/";
 $("ghUrl").value=store.ghUrl||WORKER_URL;
 $("ghUrl").onchange=()=>{store.ghUrl=$("ghUrl").value.trim();save()};
 persist("ghAuto",true);
