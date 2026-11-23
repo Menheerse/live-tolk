@@ -24,11 +24,11 @@ h1{font:700 clamp(28px,4vw,40px)/1.05 "Space Grotesk",sans-serif;margin:0}
 .tabs button[aria-selected=true]{background:var(--bg);box-shadow:0 1px 3px #0002;font-weight:600}
 .top{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:14px}
 label{display:grid;gap:4px;font-size:13px;color:var(--mut)}
-select,button,input[type=text]{font:500 16px Inter,sans-serif;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:0 12px}
+select,button,input[type=text],input[type=password]{font:500 16px Inter,sans-serif;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:0 12px}
 button{cursor:pointer}
 button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #3bbf7a;outline-offset:2px}
 .swap{width:44px;padding:0;font-size:18px}
-input[type=text]{width:100%}
+input[type=text],input[type=password]{width:100%}
 .mic{background:var(--btn);color:var(--btnink);border-color:var(--btn);padding:0 22px;font-weight:600;display:flex;gap:10px;align-items:center;justify-content:center}
 .dot{width:10px;height:10px;border-radius:50%;background:currentColor;opacity:.5;flex:none}
 .on .dot{background:#e8452c;opacity:1;animation:p 1.2s infinite}
@@ -52,6 +52,9 @@ input[type=text]{width:100%}
 .status{font-size:14px;color:var(--mut);margin-left:auto}
 .warn{background:#fff3cd;color:#5c4400;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:none;font-size:15px}
 [hidden]{display:none!important}
+.keep{margin-top:22px;border-top:1px solid var(--line);padding-top:10px;font-size:15px}
+.keep summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--mut)}
+.keep p{margin:6px 0;color:var(--mut)}
 /* gesprek */
 .people{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
 .person{display:flex;gap:6px;align-items:end;padding:6px 6px 6px 12px;border-radius:12px;background:var(--soft);border-left:6px solid var(--c)}
@@ -175,6 +178,27 @@ input[type=text]{width:100%}
       <span class="status" id="tStatus">Klaar</span>
     </div>
   </section>
+
+  <details class="keep" id="keep">
+    <summary id="keepSum">Bewaarde teksten</summary>
+    <p>Elke gesproken zin wordt met de vertaling <strong>alleen op dit toestel</strong> bewaard, zodat de app later verbeterd kan worden (bijv. welke zinnen slecht herkend of vertaald worden). Er wordt niets automatisch verstuurd. Vertel gesprekspartners dat hun tekst bewaard wordt.</p>
+    <div class="opts">
+      <label><input type="checkbox" id="keepOn"> Teksten bewaren</label>
+      <button id="keepCsv">Exporteer (Excel/CSV)</button>
+      <button id="keepJson">Exporteer (JSON)</button>
+      <button id="keepClear">Wis bewaarde teksten</button>
+    </div>
+    <p><strong>Naar GitHub sturen.</strong> Gebruik een <em>privé</em>-repository (niet de openbare app-repository). De toegangssleutel blijft alleen op dit toestel.</p>
+    <div class="opts">
+      <label style="display:grid;color:var(--mut);font-size:13px;flex:1 1 220px">Repository (eigenaar/naam)<input type="text" id="ghRepo" placeholder="Menheerse/live-tolk-data" autocomplete="off"></label>
+      <label style="display:grid;color:var(--mut);font-size:13px;flex:1 1 220px">Toegangssleutel (token)<input type="password" id="ghToken" placeholder="github_pat_…" autocomplete="off"></label>
+    </div>
+    <div class="opts">
+      <button class="mic" id="ghSend">Stuur naar GitHub</button>
+      <label><input type="checkbox" id="ghAuto"> Automatisch sturen (elke 25 zinnen)</label>
+      <span class="status" id="keepStatus"></span>
+    </div>
+  </details>
 </div>
 <script>
 {
@@ -211,7 +235,7 @@ function makeRec(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
   if(!SR)return null;
   const r=new SR();r.lang=lang;r.continuous=continuous;r.interimResults=true;
   r.onresult=e=>{let it="";for(let i=e.resultIndex;i<e.results.length;i++){const x=e.results[i];
-    if(x.isFinal){const t=x[0].transcript.trim();if(t)onFinal(t)}else it+=x[0].transcript}
+    if(x.isFinal){const t=x[0].transcript.trim();if(t)onFinal(t,x[0].confidence)}else it+=x[0].transcript}
     onInterim(it.trim())};
   r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){warn("Geen toegang tot de microfoon. Sta de microfoon toe (slotje in de adresbalk) en probeer opnieuw.");onDenied()}};
   r.onend=onEnd;
@@ -232,12 +256,36 @@ const ONLINE=[
   async(t,a,b)=>{const r=await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${a}&tl=${b}&dt=t&q=${encodeURIComponent(t)}`);if(!r.ok)throw 0;return (await r.json())[0].map(x=>x[0]).join("")},
   async(t,a,b)=>{const j=await (await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(t)}&langpair=${a}|${b}`)).json();if(j.responseStatus!=200)throw 0;return j.responseData.translatedText}
 ];
-async function translate(t,from,to){
+const ENGINES=["google","mymemory"];
+async function translate(t,from,to,meta={}){
   const a=code(from),b=code(to);if(a===b)return t;
-  const l=await getLocal(a,b);if(l){try{return await l.translate(t)}catch(e){}}
-  for(const f of ONLINE){try{return await f(t,a,b)}catch(e){}}
-  return "⚠ Vertalen mislukt (geen internet?)";
+  const t0=performance.now();let out=null,engine="mislukt";
+  const l=await getLocal(a,b);if(l){try{out=await l.translate(t);engine="chrome"}catch(e){}}
+  for(let i=0;out===null&&i<ONLINE.length;i++){try{out=await ONLINE[i](t,a,b);engine=ENGINES[i]}catch(e){}}
+  keepRecord({modus:store.tab||"conv",van:from,naar:to,gesproken:t,vertaling:out??"",vertaaldienst:engine,herkenning:meta.conf,ms:Math.round(performance.now()-t0),spreker:meta.who||""});
+  return out??"⚠ Vertalen mislukt (geen internet?)";
 }
+
+/* ---------- teksten bewaren (alleen op dit toestel) ---------- */
+const KEEP_KEY="livetolk-bewaard",KEEP_MAX=3000;
+let kept=[];try{kept=JSON.parse(localStorage.getItem(KEEP_KEY)||"[]")}catch(e){}
+const keepStatus=t=>{const el=document.getElementById("keepStatus");if(el)el.textContent=t};
+function keepSummary(){const el=document.getElementById("keepSum");if(el)el.textContent=`Bewaarde teksten (${kept.length})`}
+function keepRecord(r){
+  if(!store.chk||store.chk.keepOn===false)return;
+  r.tijd=new Date().toISOString();
+  if(typeof r.herkenning==="number")r.herkenning=Math.round(r.herkenning*100)/100;else delete r.herkenning;
+  kept.push(r);if(kept.length>KEEP_MAX){const cut=kept.length-KEEP_MAX;kept=kept.slice(cut);store.ghSent=Math.max(0,(store.ghSent||0)-cut);save()}
+  try{localStorage.setItem(KEEP_KEY,JSON.stringify(kept))}catch(e){kept.splice(0,Math.ceil(kept.length/4));try{localStorage.setItem(KEEP_KEY,JSON.stringify(kept))}catch(x){}}
+  keepSummary();
+  if(store.chk.ghAuto&&kept.length-(store.ghSent||0)>=25)ghSend(true);
+}
+function download(name,text,type){
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
+}
+const KEEP_COLS=["tijd","modus","spreker","van","naar","gesproken","vertaling","vertaaldienst","herkenning","ms"];
+const stamp=()=>new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
 /* Voorlezen. Let op: telefoons laden stemmen pas na een tijdje, Chrome breekt lange
    zinnen af na ~15 s, en Android laat microfoon en luidspreker niet tegelijk werken.
    Daarom: wachten op stemmen, tekst in stukjes, en de microfoon eerst echt laten stoppen. */
@@ -341,22 +389,22 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-s]");if(b)
 function stopConv(){if(active<0&&!cRec)return;active=-1;liveText="";killRec(cRec);cRec=null;renderConv();cStatus("Gestopt")}
 function listen(i){
   killRec(cRec);hush();
-  active=i;liveText="";let finalText="";
+  active=i;liveText="";let finalText="",conf=1;
   cRec=makeRec(people[i].lang,false,{
-    onFinal:t=>{finalText+=(finalText?" ":"")+t},
+    onFinal:(t,c)=>{finalText+=(finalText?" ":"")+t;if(typeof c==="number"&&c>0)conf=Math.min(conf,c)},
     onInterim:it=>{liveText=(finalText+" "+it).trim();renderConv()},
-    onEnd:()=>{cRec=null;if(finalText)handleTurn(i,finalText);else if(active===i)listen(i)},
+    onEnd:()=>{cRec=null;if(finalText)handleTurn(i,finalText,conf);else if(active===i)listen(i)},
     onDenied:stopConv
   });
   if(cRec)cStatus(label(i)+" – luistert");
   renderConv();
 }
-async function handleTurn(i,text){
+async function handleTurn(i,text,conf){
   const p=people[i];
   const e={p:i,lang:p.lang,who:label(i),text,tr:{},time:new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"})};
   log.push(e);liveText="";active=-1;renderConv();cStatus("Vertalen…");
   const targets=[...new Set(people.map(q=>q.lang).filter(l=>code(l)!==code(p.lang)))];
-  await Promise.all(targets.map(async l=>{e.tr[code(l)]=await translate(text,p.lang,l);renderConv()}));
+  await Promise.all(targets.map(async l=>{e.tr[code(l)]=await translate(text,p.lang,l,{conf,who:label(i)});renderConv()}));
   if(cSpeak()){sayStatus=cStatus;for(const l of targets){if(active!==-1)return;cStatus("Voorlezen…");await say(e.tr[code(l)],l)}await wait(300)}
   if(active!==-1)return;
   if(cAuto()&&people.length===2)listen(1-i);else cStatus("Klaar – tik op een knop");
@@ -416,7 +464,7 @@ function onData(d){
     const e={id:d.id,text:String(d.text||"").slice(0,2000),lang:String(d.lang||""),tr:"…"};
     R.theirs.push(e);R.live="";
     R.q=R.q.then(async()=>{
-      e.tr=await translate(e.text,e.lang,rLang());renderR();send({t:"tr",id:e.id,text:e.tr});
+      e.tr=await translate(e.text,e.lang,rLang(),{conf:typeof d.conf==="number"?d.conf:undefined,who:R.other?R.other.name:"Ander"});renderR();send({t:"tr",id:e.id,text:e.tr});
       if(!rSpeak())return;
       R.speaking=true;killRec(R.rec);R.rec=null;R.myLive="";renderR();
       sayStatus=rStatus;await wait(300);await say(e.tr,rLang());await wait(300);
@@ -441,7 +489,7 @@ function startR(){
   if(R.speaking)return;
   killRec(R.rec);
   const rec=R.rec=makeRec(rLang(),true,{
-    onFinal:t=>{const id=Date.now()+"-"+Math.random().toString(36).slice(2,6);R.mine.push({id,text:t,tr:"…"});send({t:"msg",id,text:t,lang:rLang()})},
+    onFinal:(t,c)=>{const id=Date.now()+"-"+Math.random().toString(36).slice(2,6);R.mine.push({id,text:t,tr:"…"});send({t:"msg",id,text:t,lang:rLang(),conf:c})},
     onInterim:it=>{R.myLive=it;send({t:"live",text:it});renderR()},
     onEnd:()=>{R.myLive="";renderR();setTimeout(()=>{if(R.on&&!R.speaking&&R.rec===rec)startR()},150)},
     onDenied:()=>rMic(false)
@@ -469,11 +517,11 @@ function renderTalk(){
   $("outTxt").innerHTML=outLines.map(l=>`<p>${esc(l)}</p>`).join("")||emptyHTML("Hier verschijnt de vertaling.");
   scrollEnd($("srcTxt").parentElement,$("outTxt").parentElement);
 }
-function finalTalk(text){
+function finalTalk(text,conf){
   srcLines.push(text);const i=outLines.push("…")-1;
   const f=from.value,t=to.value;
   tQueue=tQueue.then(async()=>{
-    outLines[i]=await translate(text,f,t);renderTalk();
+    outLines[i]=await translate(text,f,t,{conf});renderTalk();
     if(!tSpeak())return;
     const wasOn=running;if(wasOn){tPaused=true;killRec(tRec);tRec=null}
     sayStatus=tStatus;tStatus("Voorlezen…");await wait(300);await say(outLines[i],t);await wait(300);
@@ -500,6 +548,54 @@ $("swap").onclick=()=>{[from.value,to.value]=[to.value,from.value];relisten()};
 $("tClear").onclick=()=>{srcLines=[];outLines=[];interim="";renderTalk()};
 $("tCopy").onclick=()=>copy(outLines.join("\n"),tStatus);
 $("big").onchange=e=>{$("outTxt").style.fontSize=e.target.checked?"clamp(28px,4.5vw,48px)":""};
+
+/* ---------- bewaren: bediening ---------- */
+persist("keepOn",true);
+keepSummary();
+$("keepCsv").onclick=()=>{
+  if(!kept.length)return keepStatus("Nog niets bewaard");
+  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const csv="\ufeff"+[KEEP_COLS.join(";"),...kept.map(r=>KEEP_COLS.map(c=>q(r[c])).join(";"))].join("\r\n");
+  download(`live-tolk-${stamp()}.csv`,csv,"text/csv;charset=utf-8");keepStatus(`${kept.length} regels geëxporteerd`);
+};
+$("keepJson").onclick=()=>{
+  if(!kept.length)return keepStatus("Nog niets bewaard");
+  download(`live-tolk-${stamp()}.json`,JSON.stringify(kept,null,1),"application/json");keepStatus(`${kept.length} regels geëxporteerd`);
+};
+let clearArmed=false;
+$("keepClear").onclick=()=>{
+  if(!clearArmed){clearArmed=true;$("keepClear").textContent="Zeker weten? Tik nogmaals";setTimeout(()=>{clearArmed=false;$("keepClear").textContent="Wis bewaarde teksten"},4000);return}
+  kept=[];store.ghSent=0;save();try{localStorage.removeItem(KEEP_KEY)}catch(e){}clearArmed=false;$("keepClear").textContent="Wis bewaarde teksten";keepSummary();keepStatus("Gewist");
+};
+
+/* ---------- bewaren: naar GitHub ---------- */
+$("ghRepo").value=store.ghRepo||"Menheerse/live-tolk-data";
+try{$("ghToken").value=localStorage.getItem("livetolk-ghtoken")||""}catch(e){}
+$("ghRepo").onchange=()=>{store.ghRepo=$("ghRepo").value.trim();save()};
+$("ghToken").onchange=()=>{try{localStorage.setItem("livetolk-ghtoken",$("ghToken").value.trim())}catch(e){}};
+persist("ghAuto",false);
+if(!store.device){store.device=Math.random().toString(36).slice(2,8);save()}
+const b64=str=>{const bytes=new TextEncoder().encode(str);let bin="";for(let i=0;i<bytes.length;i+=8192)bin+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(bin)};
+let ghBusy=false;
+async function ghSend(quiet){
+  if(ghBusy)return;
+  const repo=$("ghRepo").value.trim(),token=$("ghToken").value.trim();
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)||!token){if(!quiet)keepStatus("Vul repository en toegangssleutel in");return}
+  const from=Math.min(store.ghSent||0,kept.length),batch=kept.slice(from);
+  if(!batch.length){if(!quiet)keepStatus("Alles is al verstuurd");return}
+  ghBusy=true;keepStatus("Versturen…");
+  const now=new Date(),day=now.toISOString().slice(0,10);
+  const path=`teksten/${day}/${now.toISOString().slice(11,19).replace(/:/g,"")}-${store.device}.json`;
+  try{
+    const r=await fetch(`https://api.github.com/repos/${repo}/contents/${path}`,{method:"PUT",
+      headers:{"Authorization":"Bearer "+token,"Accept":"application/vnd.github+json"},
+      body:JSON.stringify({message:`Live Tolk: ${batch.length} zinnen (${store.device})`,content:b64(JSON.stringify(batch,null,1))})});
+    if(r.ok){store.ghSent=from+batch.length;save();keepStatus(`${batch.length} zinnen naar GitHub gestuurd`)}
+    else keepStatus({401:"Toegangssleutel ongeldig of verlopen",403:"Sleutel mag niet schrijven in deze repository",404:"Repository niet gevonden (of sleutel heeft er geen toegang toe)"}[r.status]||("GitHub-fout "+r.status));
+  }catch(e){keepStatus("Geen verbinding met GitHub")}
+  ghBusy=false;
+}
+$("ghSend").onclick=()=>ghSend(false);
 
 /* ---------- start ---------- */
 renderPeople();renderTalk();
