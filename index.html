@@ -130,6 +130,7 @@ input[type=text],input[type=password]{width:100%}
       <label><input type="checkbox" id="auto" checked> Beurt automatisch naar de ander</label>
       <label><input type="checkbox" id="cSpeak" checked> Vertaling voorlezen</label>
       <label><input type="checkbox" id="face"> Tegenover elkaar (scherm in tweeën)</label>
+      <label>Einde beurt na <select id="pause" style="min-height:40px"><option value="1">1 s</option><option value="1.5">1,5 s</option><option value="2">2 s</option><option value="3">3 s</option><option value="4">4 s</option><option value="5">5 s</option></select> stilte</label>
     </div>
     <div id="normal">
       <div class="log" id="log"></div>
@@ -248,11 +249,14 @@ async function copy(text,st){try{await navigator.clipboard.writeText(text);st("G
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(!SR)warn("Deze browser ondersteunt geen spraakherkenning. Gebruik Google Chrome of Microsoft Edge.");
 function killRec(r){if(!r)return;r.onend=r.onresult=r.onerror=null;try{r.abort()}catch(e){}}
+/* Ruis negeren: 1-2 woorden waar de herkenning zelf erg onzeker over is (bijv. tv of achtergrondgeluid).
+   Sommige telefoons geven altijd 0 als zekerheid; dan wordt niets weggefilterd. */
+const isNoise=(t,c)=>typeof c==="number"&&c>0&&c<0.6&&t.split(/\s+/).length<=2;
 function makeRec(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
   if(!SR)return null;
   const r=new SR();r.lang=lang;r.continuous=continuous;r.interimResults=true;
   r.onresult=e=>{let it="";for(let i=e.resultIndex;i<e.results.length;i++){const x=e.results[i];
-    if(x.isFinal){const t=x[0].transcript.trim();if(t)onFinal(t,x[0].confidence)}else it+=x[0].transcript}
+    if(x.isFinal){const t=x[0].transcript.trim(),c=x[0].confidence;if(t&&!isNoise(t,c))onFinal(t,c)}else it+=x[0].transcript}
     onInterim(it.trim())};
   r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){warn("Geen toegang tot de microfoon. Sta de microfoon toe (slotje in de adresbalk) en probeer opnieuw.");onDenied()}};
   r.onend=onEnd;
@@ -261,14 +265,41 @@ function makeRec(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
 }
 
 /* ---------- vertalen en voorlezen ---------- */
-const locals={};
+/* Chrome op de computer (138+) heeft een ingebouwde vertaler die per talenpaar een taalpakket downloadt.
+   Is het pakket er nog niet, dan vertalen we online en downloaden we het pakket op de achtergrond.
+   Chrome eist dat het downloaden start na een tik/klik; daarom proberen we het bij elke klik. */
+const locals={},loading={};
+const packStatus=t=>{const id={conv:"cStatus",remote:"rStatus",talk:"tStatus"}[store.tab]||"cStatus";const el=document.getElementById(id);if(el)el.textContent=t};
 async function getLocal(a,b){
   if(!("Translator" in self))return null;
-  const k=a+">"+b;if(k in locals)return locals[k];
-  try{const av=await Translator.availability({sourceLanguage:a,targetLanguage:b});
-    locals[k]=av==="unavailable"?null:await Translator.create({sourceLanguage:a,targetLanguage:b})}catch(e){locals[k]=null}
-  return locals[k];
+  const k=a+">"+b;if(locals[k]!==undefined)return locals[k];
+  try{
+    const av=await Translator.availability({sourceLanguage:a,targetLanguage:b});
+    if(av==="unavailable"){locals[k]=null;return null}
+    if(av==="available"){locals[k]=await Translator.create({sourceLanguage:a,targetLanguage:b});return locals[k]}
+    prepareLocal(a,b);
+  }catch(e){}
+  return null;
 }
+function prepareLocal(a,b){
+  if(!("Translator" in self))return;
+  a=code(a);b=code(b);const k=a+">"+b;
+  if(a===b||locals[k]!==undefined||loading[k])return;
+  loading[k]=Translator.availability({sourceLanguage:a,targetLanguage:b}).then(av=>{
+    if(av==="unavailable"){locals[k]=null;return}
+    const dl=av!=="available";
+    return Translator.create({sourceLanguage:a,targetLanguage:b,monitor(m){m.addEventListener("downloadprogress",e=>packStatus(`Taalpakket ${a}→${b} downloaden: ${Math.round(e.loaded*100)}%`))}})
+      .then(t=>{locals[k]=t;if(dl)packStatus(`Taalpakket ${a}→${b} klaar – vertalen gaat nu sneller en zonder internet`)});
+  }).catch(()=>{}).finally(()=>{delete loading[k]});
+}
+function prepareNeeded(){
+  const pairs=[];
+  if(store.tab==="talk")pairs.push([from.value,to.value]);
+  else if(store.tab==="remote"){if(R.other)pairs.push([R.other.lang,rLang()])}
+  else for(const p of people)for(const q of people)if(code(p.lang)!==code(q.lang))pairs.push([p.lang,q.lang]);
+  for(const [a,b] of pairs)prepareLocal(a,b);
+}
+document.addEventListener("click",()=>{try{prepareNeeded()}catch(e){}});
 const ONLINE=[
   async(t,a,b)=>{const r=await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${a}&tl=${b}&dt=t&q=${encodeURIComponent(t)}`);if(!r.ok)throw 0;return (await r.json())[0].map(x=>x[0]).join("")},
   async(t,a,b)=>{const j=await (await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(t)}&langpair=${a}|${b}`)).json();if(j.responseStatus!=200)throw 0;return j.responseData.translatedText}
@@ -367,6 +398,9 @@ let log=[],active=-1,cRec=null,liveText="";
 const cStatus=statusOf("cStatus");
 const cAuto=persist("auto",true),cSpeak=persist("cSpeak",true),cFace=persist("face",false,()=>renderConv());
 const label=i=>`Persoon ${i+1} · ${name(people[i].lang)}`;
+$("pause").value=String(store.pause||2);
+$("pause").onchange=()=>{store.pause=+$("pause").value;save()};
+const pauseMs=()=>(store.pause||2)*1000;
 const textFor=(e,lang)=>code(e.lang)===code(lang)?e.text:(e.tr[code(lang)]??"…");
 
 function renderPeople(){
@@ -406,11 +440,13 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-s]");if(b)
 function stopConv(){if(active<0&&!cRec)return;active=-1;liveText="";killRec(cRec);cRec=null;renderConv();cStatus("Gestopt")}
 function listen(i){
   killRec(cRec);hush();
-  active=i;liveText="";let finalText="",conf=1;
-  cRec=makeRec(people[i].lang,false,{
-    onFinal:(t,c)=>{finalText+=(finalText?" ":"")+t;if(typeof c==="number"&&c>0)conf=Math.min(conf,c)},
-    onInterim:it=>{liveText=(finalText+" "+it).trim();renderConv()},
-    onEnd:()=>{cRec=null;if(finalText)handleTurn(i,finalText,conf);else if(active===i)listen(i)},
+  active=i;liveText="";let finalText="",conf=1,timer=null;
+  /* Doorluisteren; de beurt eindigt pas na de ingestelde stilte */
+  const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>{if(cRec===me){try{me.stop()}catch(e){}}},pauseMs())};
+  const me=cRec=makeRec(people[i].lang,true,{
+    onFinal:(t,c)=>{finalText+=(finalText?" ":"")+t;if(typeof c==="number"&&c>0)conf=Math.min(conf,c);arm()},
+    onInterim:it=>{liveText=(finalText+" "+it).trim();if(it)arm();renderConv()},
+    onEnd:()=>{clearTimeout(timer);if(cRec!==me)return;cRec=null;if(finalText)handleTurn(i,finalText,conf);else if(active===i)listen(i)},
     onDenied:stopConv
   });
   if(cRec)cStatus(label(i)+" – luistert");
