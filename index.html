@@ -53,6 +53,11 @@ input[type=text],input[type=password]{width:100%}
 .warn{background:#fff3cd;color:#5c4400;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:none;font-size:15px}
 [hidden]{display:none!important}
 .keep{margin-top:22px;border-top:1px solid var(--line);padding-top:10px;font-size:15px}
+.modal{position:fixed;inset:0;background:#000a;display:grid;place-items:center;z-index:50;padding:16px}
+.mbox{background:var(--bg);color:var(--ink);border-radius:18px;padding:clamp(20px,4vw,30px);max-width:500px;width:100%;display:grid;gap:12px;box-shadow:0 20px 60px #0006}
+.mbox h2{font:700 24px/1.15 "Space Grotesk",sans-serif;margin:0}
+.mbox p,.mbox ul{margin:0;font-size:15px}.mbox ul{padding-left:20px;color:var(--mut)}
+.mbox .row{margin-top:6px}
 .keep summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--mut)}
 .keep p{margin:6px 0;color:var(--mut)}
 .opts label.field{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;align-items:stretch;flex:1 1 260px;color:var(--mut);font-size:13px}
@@ -93,6 +98,19 @@ input[type=text],input[type=password]{width:100%}
 </style>
 </head>
 <body>
+<div class="modal" id="consent" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
+  <div class="mbox">
+    <h2 id="consentTitle">Voordat je begint</h2>
+    <p>Live Tolk bewaart wat er gezegd wordt en de vertaling. Deze teksten worden <strong>automatisch verstuurd</strong> en gebruikt voor <strong>training en verbetering van de app</strong>.</p>
+    <ul>
+      <li>Bewaard wordt: de gesproken tekst, de vertaling, de talen en het tijdstip.</li>
+      <li>Geen geluidsopnames, geen locatie.</li>
+      <li>Vertel je gesprekspartner dat het gesprek wordt bewaard.</li>
+    </ul>
+    <p>Niet akkoord? Dan werkt de app gewoon, maar wordt er niets bewaard of verstuurd.</p>
+    <div class="row"><button id="consentNo">Niet akkoord</button><button class="mic" id="consentYes">Akkoord</button></div>
+  </div>
+</div>
 <div class="wrap">
   <div class="head">
     <h1>Live Tolk</h1>
@@ -182,7 +200,7 @@ input[type=text],input[type=password]{width:100%}
 
   <details class="keep" id="keep">
     <summary id="keepSum">Bewaarde teksten</summary>
-    <p>Elke gesproken zin wordt met de vertaling <strong>alleen op dit toestel</strong> bewaard, zodat de app later verbeterd kan worden (bijv. welke zinnen slecht herkend of vertaald worden). Er wordt alleen iets verstuurd als je hieronder GitHub instelt. Vertel gesprekspartners dat hun tekst bewaard wordt.</p>
+    <p>Elke gesproken zin wordt met de vertaling bewaard en automatisch naar GitHub gestuurd, voor training en verbetering van de app. Vertel gesprekspartners dat hun tekst bewaard wordt.</p>
     <div class="opts">
       <label><input type="checkbox" id="keepOn"> Teksten bewaren</label>
       <button id="keepCsv">Exporteer (Excel/CSV)</button>
@@ -196,7 +214,7 @@ input[type=text],input[type=password]{width:100%}
     </div>
     <div class="opts">
       <button class="mic" id="ghSend">Stuur naar GitHub</button>
-      <label><input type="checkbox" id="ghAuto"> Automatisch sturen (elke 25 zinnen)</label>
+      <label><input type="checkbox" id="ghAuto"> Automatisch sturen</label>
       <span class="status" id="keepStatus"></span>
     </div>
   </details>
@@ -279,7 +297,7 @@ function keepRecord(r){
   kept.push(r);if(kept.length>KEEP_MAX){const cut=kept.length-KEEP_MAX;kept=kept.slice(cut);store.ghSent=Math.max(0,(store.ghSent||0)-cut);save()}
   try{localStorage.setItem(KEEP_KEY,JSON.stringify(kept))}catch(e){kept.splice(0,Math.ceil(kept.length/4));try{localStorage.setItem(KEEP_KEY,JSON.stringify(kept))}catch(x){}}
   keepSummary();
-  if(store.chk.ghAuto&&kept.length-(store.ghSent||0)>=25)ghSend(true);
+  if(store.chk.ghAuto!==false&&kept.length-(store.ghSent||0)>=5)ghSend(true);
 }
 function download(name,text,type){
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;
@@ -574,11 +592,13 @@ $("ghRepo").value=store.ghRepo||"Menheerse/live-tolk-data";
 try{$("ghToken").value=localStorage.getItem("livetolk-ghtoken")||""}catch(e){}
 $("ghRepo").onchange=()=>{store.ghRepo=$("ghRepo").value.trim();save()};
 $("ghToken").onchange=()=>{try{localStorage.setItem("livetolk-ghtoken",$("ghToken").value.trim())}catch(e){}};
-persist("ghAuto",false);
+persist("ghAuto",true);
+/* bij wegklikken / scherm uit: resterende zinnen nog versturen */
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&store.chk.ghAuto!==false)ghSend(true,true)});
 if(!store.device){store.device=Math.random().toString(36).slice(2,8);save()}
 const b64=str=>{const bytes=new TextEncoder().encode(str);let bin="";for(let i=0;i<bytes.length;i+=8192)bin+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(bin)};
 let ghBusy=false;
-async function ghSend(quiet){
+async function ghSend(quiet,keepalive){
   if(ghBusy)return;
   const repo=$("ghRepo").value.trim(),token=$("ghToken").value.trim();
   if(!/^[\w.-]+\/[\w.-]+$/.test(repo)||!token){if(!quiet)keepStatus("Vul repository en toegangssleutel in");return}
@@ -588,7 +608,7 @@ async function ghSend(quiet){
   const now=new Date(),day=now.toISOString().slice(0,10);
   const path=`teksten/${day}/${now.toISOString().slice(11,19).replace(/:/g,"")}-${store.device}.json`;
   try{
-    const r=await fetch(`https://api.github.com/repos/${repo}/contents/${path}`,{method:"PUT",
+    const r=await fetch(`https://api.github.com/repos/${repo}/contents/${path}`,{method:"PUT",keepalive:!!keepalive,
       headers:{"Authorization":"Bearer "+token,"Accept":"application/vnd.github+json"},
       body:JSON.stringify({message:`Live Tolk: ${batch.length} zinnen (${store.device})`,content:b64(JSON.stringify(batch,null,1))})});
     if(r.ok){store.ghSent=from+batch.length;save();keepStatus(`${batch.length} zinnen naar GitHub gestuurd`)}
@@ -597,6 +617,16 @@ async function ghSend(quiet){
   ghBusy=false;
 }
 $("ghSend").onclick=()=>ghSend(false);
+
+/* ---------- toestemming bij openen ---------- */
+function consent(yes){
+  store.chk.keepOn=yes;store.consent=yes?"ja":"nee";save();
+  $("keepOn").checked=yes;
+  $("consent").hidden=true;
+}
+$("consentYes").onclick=()=>consent(true);
+$("consentNo").onclick=()=>consent(false);
+$("consentYes").focus();
 
 /* ---------- start ---------- */
 renderPeople();renderTalk();
