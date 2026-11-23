@@ -207,10 +207,8 @@ input[type=text],input[type=password]{width:100%}
       <button id="keepJson">Exporteer (JSON)</button>
       <button id="keepClear">Wis bewaarde teksten</button>
     </div>
-    <p><strong>Naar GitHub sturen.</strong> Gebruik een <em>privé</em>-repository (niet de openbare app-repository). De toegangssleutel blijft alleen op dit toestel.</p>
     <div class="opts">
-      <label class="field">Repository (eigenaar/naam)<input type="text" id="ghRepo" placeholder="Menheerse/live-tolk-data" autocomplete="off"></label>
-      <label class="field">Toegangssleutel (token)<input type="password" id="ghToken" placeholder="github_pat_…" autocomplete="off"></label>
+      <label class="field">Verzendadres (tussenstation)<input type="text" id="ghUrl" placeholder="https://live-tolk.….workers.dev" autocomplete="off" inputmode="url"></label>
     </div>
     <div class="opts">
       <button class="mic" id="ghSend">Stuur naar GitHub</button>
@@ -587,33 +585,33 @@ $("keepClear").onclick=()=>{
   kept=[];store.ghSent=0;save();try{localStorage.removeItem(KEEP_KEY)}catch(e){}clearArmed=false;$("keepClear").textContent="Wis bewaarde teksten";keepSummary();keepStatus("Gewist");
 };
 
-/* ---------- bewaren: naar GitHub ---------- */
-$("ghRepo").value=store.ghRepo||"Menheerse/live-tolk-data";
-try{$("ghToken").value=localStorage.getItem("livetolk-ghtoken")||""}catch(e){}
-$("ghRepo").onchange=()=>{store.ghRepo=$("ghRepo").value.trim();save()};
-$("ghToken").onchange=()=>{try{localStorage.setItem("livetolk-ghtoken",$("ghToken").value.trim())}catch(e){}};
+/* ---------- bewaren: naar GitHub via tussenstation ----------
+   De app kent geen GitHub-sleutel. Zinnen gaan naar een Cloudflare Worker (zie worker/worker.js),
+   die ze in de privé-repository zet. Vul hieronder het adres van die Worker in. */
+const WORKER_URL="";
+$("ghUrl").value=store.ghUrl||WORKER_URL;
+$("ghUrl").onchange=()=>{store.ghUrl=$("ghUrl").value.trim();save()};
 persist("ghAuto",true);
 /* bij wegklikken / scherm uit: resterende zinnen nog versturen */
 document.addEventListener("visibilitychange",()=>{if(document.hidden&&store.chk.ghAuto!==false)ghSend(true,true)});
 if(!store.device){store.device=Math.random().toString(36).slice(2,8);save()}
-const b64=str=>{const bytes=new TextEncoder().encode(str);let bin="";for(let i=0;i<bytes.length;i+=8192)bin+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(bin)};
+try{localStorage.removeItem("livetolk-ghtoken")}catch(e){}  /* oude sleutel van dit toestel opruimen */
 let ghBusy=false;
 async function ghSend(quiet,keepalive){
   if(ghBusy)return;
-  const repo=$("ghRepo").value.trim(),token=$("ghToken").value.trim();
-  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)||!token){if(!quiet)keepStatus("Vul repository en toegangssleutel in");return}
-  const from=Math.min(store.ghSent||0,kept.length),batch=kept.slice(from);
+  const url=$("ghUrl").value.trim();
+  if(!/^https:\/\//.test(url)){if(!quiet)keepStatus("Verzendadres ontbreekt");return}
+  const from=Math.min(store.ghSent||0,kept.length),batch=kept.slice(from,from+200);
   if(!batch.length){if(!quiet)keepStatus("Alles is al verstuurd");return}
   ghBusy=true;keepStatus("Versturen…");
-  const now=new Date(),day=now.toISOString().slice(0,10);
-  const path=`teksten/${day}/${now.toISOString().slice(11,19).replace(/:/g,"")}-${store.device}.json`;
   try{
-    const r=await fetch(`https://api.github.com/repos/${repo}/contents/${path}`,{method:"PUT",keepalive:!!keepalive,
-      headers:{"Authorization":"Bearer "+token,"Accept":"application/vnd.github+json"},
-      body:JSON.stringify({message:`Live Tolk: ${batch.length} zinnen (${store.device})`,content:b64(JSON.stringify(batch,null,1))})});
-    if(r.ok){store.ghSent=from+batch.length;save();keepStatus(`${batch.length} zinnen naar GitHub gestuurd`)}
-    else keepStatus({401:"Toegangssleutel ongeldig of verlopen",403:"Sleutel mag niet schrijven in deze repository",404:"Repository niet gevonden (of sleutel heeft er geen toegang toe)"}[r.status]||("GitHub-fout "+r.status));
-  }catch(e){keepStatus("Geen verbinding met GitHub")}
+    /* text/plain: geen extra CORS-voorvraag nodig, werkt ook bij wegklikken */
+    const r=await fetch(url,{method:"POST",keepalive:!!keepalive,headers:{"Content-Type":"text/plain"},
+      body:JSON.stringify({device:store.device,items:batch})});
+    if(r.ok){store.ghSent=from+batch.length;save();keepStatus(`${batch.length} zinnen verstuurd`);
+      if(kept.length>store.ghSent){ghBusy=false;return ghSend(quiet,keepalive)}}
+    else{let f="";try{f=(await r.json()).fout||""}catch(e){}keepStatus(`Versturen mislukt (${r.status}${f?": "+f:""})`)}
+  }catch(e){keepStatus("Geen verbinding met het tussenstation")}
   ghBusy=false;
 }
 $("ghSend").onclick=()=>ghSend(false);
