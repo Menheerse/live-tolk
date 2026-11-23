@@ -18,6 +18,11 @@
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
 h1{font:700 clamp(28px,4vw,40px)/1.05 "Space Grotesk",sans-serif;margin:0}
 .wrap{max-width:1240px;margin:0 auto;padding:clamp(18px,3vw,40px) max(4vw,16px)}
+.brand{display:flex;align-items:center;gap:clamp(12px,2vw,20px);flex-wrap:wrap}
+.logo{height:clamp(44px,7vw,60px);width:auto;display:block}
+:root[data-theme=dark] .logo{background:#fff;border-radius:10px;padding:4px 8px}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .logo{background:#fff;border-radius:10px;padding:4px 8px}}
+.brand h1{padding-left:clamp(12px,2vw,20px);border-left:2px solid var(--line)}
 .head{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-bottom:18px}
 .tabs{display:flex;gap:4px;background:var(--soft);padding:4px;border-radius:12px}
 .tabs button{border:0;background:transparent}
@@ -53,7 +58,8 @@ input[type=text],input[type=password]{width:100%}
 .warn{background:#fff3cd;color:#5c4400;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:none;font-size:15px}
 [hidden]{display:none!important}
 .keep{margin-top:22px;border-top:1px solid var(--line);padding-top:10px;font-size:15px}
-.modal{position:fixed;inset:0;background:#000a;display:grid;place-items:center;z-index:50;padding:16px}
+.modal{position:fixed;inset:0;background:#000a;display:flex;z-index:50;padding:16px;overflow-y:auto}
+.modal .mbox{margin:auto}
 .mbox{background:var(--bg);color:var(--ink);border-radius:18px;padding:clamp(20px,4vw,30px);max-width:500px;width:100%;display:grid;gap:12px;box-shadow:0 20px 60px #0006}
 .mbox h2{font:700 24px/1.15 "Space Grotesk",sans-serif;margin:0}
 .mbox p,.mbox ul{margin:0;font-size:15px}.mbox ul{padding-left:20px;color:var(--mut)}
@@ -113,7 +119,7 @@ input[type=text],input[type=password]{width:100%}
 </div>
 <div class="wrap">
   <div class="head">
-    <h1>Live Tolk</h1>
+    <div class="brand"><img src="logo.png" alt="B-IM Menheerse – Bouw- en Informatiemanagement" class="logo" width="383" height="160"><h1>Live Tolk</h1></div>
     <div class="tabs" role="tablist">
       <button role="tab" id="tabConv" aria-selected="true">Gesprek</button>
       <button role="tab" id="tabRemote" aria-selected="false">Op afstand</button>
