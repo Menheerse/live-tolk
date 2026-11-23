@@ -48,13 +48,14 @@ input[type=text],input[type=password]{width:100%}
 .out .empty{color:inherit;opacity:.7}
 .opts{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px;align-items:center}
 .opts label{display:flex;flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px;min-height:44px}
-.opts input{width:20px;height:20px;accent-color:#3bbf7a}
+.opts input[type=checkbox]{width:20px;height:20px;accent-color:#3bbf7a}
 .status{font-size:14px;color:var(--mut);margin-left:auto}
 .warn{background:#fff3cd;color:#5c4400;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:none;font-size:15px}
 [hidden]{display:none!important}
 .keep{margin-top:22px;border-top:1px solid var(--line);padding-top:10px;font-size:15px}
 .keep summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--mut)}
 .keep p{margin:6px 0;color:var(--mut)}
+.opts label.field{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;align-items:stretch;flex:1 1 260px;color:var(--mut);font-size:13px}
 /* gesprek */
 .people{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
 .person{display:flex;gap:6px;align-items:end;padding:6px 6px 6px 12px;border-radius:12px;background:var(--soft);border-left:6px solid var(--c)}
@@ -181,7 +182,7 @@ input[type=text],input[type=password]{width:100%}
 
   <details class="keep" id="keep">
     <summary id="keepSum">Bewaarde teksten</summary>
-    <p>Elke gesproken zin wordt met de vertaling <strong>alleen op dit toestel</strong> bewaard, zodat de app later verbeterd kan worden (bijv. welke zinnen slecht herkend of vertaald worden). Er wordt niets automatisch verstuurd. Vertel gesprekspartners dat hun tekst bewaard wordt.</p>
+    <p>Elke gesproken zin wordt met de vertaling <strong>alleen op dit toestel</strong> bewaard, zodat de app later verbeterd kan worden (bijv. welke zinnen slecht herkend of vertaald worden). Er wordt alleen iets verstuurd als je hieronder GitHub instelt. Vertel gesprekspartners dat hun tekst bewaard wordt.</p>
     <div class="opts">
       <label><input type="checkbox" id="keepOn"> Teksten bewaren</label>
       <button id="keepCsv">Exporteer (Excel/CSV)</button>
@@ -190,8 +191,8 @@ input[type=text],input[type=password]{width:100%}
     </div>
     <p><strong>Naar GitHub sturen.</strong> Gebruik een <em>privé</em>-repository (niet de openbare app-repository). De toegangssleutel blijft alleen op dit toestel.</p>
     <div class="opts">
-      <label style="display:grid;color:var(--mut);font-size:13px;flex:1 1 220px">Repository (eigenaar/naam)<input type="text" id="ghRepo" placeholder="Menheerse/live-tolk-data" autocomplete="off"></label>
-      <label style="display:grid;color:var(--mut);font-size:13px;flex:1 1 220px">Toegangssleutel (token)<input type="password" id="ghToken" placeholder="github_pat_…" autocomplete="off"></label>
+      <label class="field">Repository (eigenaar/naam)<input type="text" id="ghRepo" placeholder="Menheerse/live-tolk-data" autocomplete="off"></label>
+      <label class="field">Toegangssleutel (token)<input type="password" id="ghToken" placeholder="github_pat_…" autocomplete="off"></label>
     </div>
     <div class="opts">
       <button class="mic" id="ghSend">Stuur naar GitHub</button>
