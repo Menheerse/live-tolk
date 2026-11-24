@@ -32,9 +32,17 @@ h1{font:700 clamp(28px,4vw,40px)/1.05 "Space Grotesk",sans-serif;margin:0}
 .brand h1{padding-left:clamp(12px,2vw,20px);border-left:2px solid var(--line)}
 .logo.partner{height:clamp(48px,7.5vw,66px)}
 .head{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-bottom:18px}
-.tabs{display:flex;gap:4px;background:var(--soft);padding:4px;border-radius:12px}
-.tabs button{border:0;background:transparent}
-.tabs button[aria-selected=true]{background:var(--bg);box-shadow:0 1px 3px #0002;font-weight:600}
+/* tabbladen als duidelijke knoppen; gekozen knop gevuld in B-IM-blauw */
+.tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:min(100%,520px)}
+.tabs button{min-height:54px;padding:8px 10px;border:2px solid var(--line);border-radius:14px;background:var(--bg);color:var(--ink);
+  font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 0 var(--line),0 3px 8px #0001;transition:transform .1s,box-shadow .1s,background .2s}
+.tabs button svg{width:22px;height:22px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tabs button:hover{border-color:#e46f2a}
+.tabs button:active{transform:translateY(2px);box-shadow:0 0 0 var(--line)}
+.tabs button[aria-selected=true]{background:#0e2f45;border-color:#0e2f45;color:#fff;box-shadow:0 2px 0 #e46f2a,0 4px 10px #0e2f4533}
+:root[data-theme=dark] .tabs button[aria-selected=true]{background:#e46f2a;border-color:#e46f2a}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .tabs button[aria-selected=true]{background:#e46f2a;border-color:#e46f2a}}
+@media(max-width:600px){.tabs{width:100%}.tabs button{flex-direction:column;gap:3px;font-size:14px;min-height:62px}}
 .top{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:14px}
 label{display:grid;gap:4px;font-size:13px;color:var(--mut)}
 select,button,input[type=text],input[type=password]{font:500 16px Inter,sans-serif;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:0 12px}
@@ -140,9 +148,9 @@ input[type=text],input[type=password]{width:100%}
   <div class="head">
     <div class="brand"><img src="logo.png" alt="B-IM Menheerse – Bouw- en Informatiemanagement" class="logo" width="383" height="160"><h1>Live Tolk</h1><img src="denijs.png" alt="De Nijs bouw en ontwikkeling" class="logo partner" width="323" height="200"></div>
     <div class="tabs" role="tablist">
-      <button role="tab" id="tabConv" aria-selected="true">Gesprek</button>
-      <button role="tab" id="tabRemote" aria-selected="false">Op afstand</button>
-      <button role="tab" id="tabTalk" aria-selected="false">Toespraak</button>
+      <button role="tab" id="tabConv" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3v-3H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M17 9h3a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-4-3h-3"/></svg>Gesprek</button>
+      <button role="tab" id="tabRemote" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="7" height="13" rx="1.5"/><rect x="15" y="7" width="7" height="13" rx="1.5"/><path d="M10.5 9.5c1.2-1 2.8-1 4 0M11.5 12c.6-.4 1.4-.4 2 0"/></svg>Op afstand</button>
+      <button role="tab" id="tabTalk" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg>Toespraak</button>
     </div>
   </div>
   <div class="warn" id="warn"></div>
