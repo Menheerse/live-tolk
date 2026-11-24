@@ -728,6 +728,9 @@ async function ghSend(quiet,keepalive){
   const from=Math.min(store.ghSent||0,kept.length),batch=kept.slice(from,from+200);
   if(!batch.length){if(!quiet)keepStatus("Alles is al verstuurd");return}
   ghBusy=true;keepStatus("Versturen…");
+  /* Bij wegklikken/verversen komt het antwoord vaak niet meer aan; markeer dan vooraf als verstuurd,
+     anders worden dezelfde zinnen later nog een keer meegestuurd. */
+  if(keepalive){store.ghSent=from+batch.length;save()}
   try{
     /* text/plain: geen extra CORS-voorvraag nodig, werkt ook bij wegklikken */
     const r=await fetch(url,{method:"POST",keepalive:!!keepalive,headers:{"Content-Type":"text/plain"},
