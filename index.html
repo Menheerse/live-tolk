@@ -117,6 +117,8 @@ input[type=text],input[type=password]{width:100%}
 .half .line{font:500 clamp(18px,2.4vw,26px)/1.3 "Space Grotesk",sans-serif;margin:0}
 .half .line.mine{font:400 15px Inter,sans-serif;color:var(--mut)}
 .half .ph{margin:0}
+/* tegenover elkaar: bovenste helft gedraaid voor wie aan de overkant zit */
+.half.flip{transform:rotate(180deg)}
 @media(max-width:700px){.panes{grid-template-columns:1fr}.pane{min-height:200px;max-height:none}.out{order:-1}.status{margin-left:0;width:100%}.log{max-height:none;min-height:260px}}
 </style>
 </head>
@@ -447,7 +449,7 @@ function renderConv(){
     $("facing").innerHTML=[1,0].map(i=>{
       const L=people[i].lang;
       const lines=log.map(e=>lineHTML(textFor(e,L),"",e.p===i?"mine":"")).join("")+(liveText?lineHTML(liveText,"","live"+(active===i?" mine":"")):"");
-      return `<div class="half" style="--c:${COLORS[i]}"><div class="ph">${esc(label(i))}</div><div class="lines">${lines||emptyHTML("Tik op je knop en praat.")}</div>${micBtn(i)}</div>`;
+      return `<div class="half${i===1?" flip":""}" style="--c:${COLORS[i]}"><div class="ph">${esc(label(i))}</div><div class="lines">${lines||emptyHTML("Tik op je knop en praat.")}</div>${micBtn(i)}</div>`;
     }).join("");
     scrollEnd(...document.querySelectorAll("#facing .lines"));
   }else{
