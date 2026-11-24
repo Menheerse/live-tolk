@@ -9,7 +9,30 @@
  *   GITHUB_TOKEN    (Secret)  fijnmazige sleutel met Contents: Read and write op de data-repository
  *   REPO            (Text)    bijv. Menheerse/live-tolk-data
  *   ALLOWED_ORIGIN  (Text)    bijv. https://menheerse.github.io
+ *   DEEPL_KEY       (Secret)  optioneel: DeepL API-sleutel; dan vertaalt /translate via DeepL
+ *
+ * Routes:
+ *   POST /           zinnen opslaan in GitHub
+ *   POST /translate  {text, source, target} -> {text} via DeepL
  */
+
+/* DeepL wil bij sommige doeltalen een variant */
+const DEEPL_TARGET = { en: "EN-GB", pt: "PT-PT", zh: "ZH-HANS" };
+
+async function deeplTranslate(env, text, source, target) {
+  const key = env.DEEPL_KEY;
+  const host = key.trim().endsWith(":fx") ? "https://api-free.deepl.com" : "https://api.deepl.com";
+  const body = { text: [text], target_lang: DEEPL_TARGET[target] || target.toUpperCase() };
+  if (source) body.source_lang = source.toUpperCase();
+  const r = await fetch(`${host}/v2/translate`, {
+    method: "POST",
+    headers: { "Authorization": `DeepL-Auth-Key ${key.trim()}`, "Content-Type": "application/json", "User-Agent": "live-tolk-worker" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) return { status: r.status };
+  const j = await r.json();
+  return { status: 200, text: j.translations?.[0]?.text ?? "" };
+}
 
 const MAX_BODY = 200_000;   // bytes per verzending
 const MAX_ITEMS = 200;      // zinnen per verzending
@@ -33,6 +56,20 @@ export default {
     if (request.method === "GET") return reply(200, { ok: true, dienst: "Live Tolk tussenstation" });
     if (request.method !== "POST") return reply(405, { fout: "Alleen POST" });
     if (!okOrigin) return reply(403, { fout: "Niet toegestaan vanaf deze website" });
+
+    /* ---- vertalen via DeepL ---- */
+    if (new URL(request.url).pathname.replace(/\/+$/, "") === "/translate") {
+      if (!env.DEEPL_KEY) return reply(501, { fout: "DeepL niet ingesteld (DEEPL_KEY)" });
+      let q;
+      try { q = JSON.parse(await request.text()); } catch { return reply(400, { fout: "Geen geldige JSON" }); }
+      const text = String(q.text || "").slice(0, 3000);
+      const source = String(q.source || "").replace(/[^a-z]/gi, "").slice(0, 3);
+      const target = String(q.target || "").replace(/[^a-z]/gi, "").slice(0, 3).toLowerCase();
+      if (!text || !target) return reply(400, { fout: "text en target zijn verplicht" });
+      const res = await deeplTranslate(env, text, source, target);
+      if (res.status !== 200) return reply(res.status === 400 ? 422 : 502, { fout: "DeepL weigerde", status: res.status });
+      return reply(200, { text: res.text, dienst: "deepl" });
+    }
     if (!env.GITHUB_TOKEN || !env.REPO) return reply(500, { fout: "Worker is niet ingesteld (GITHUB_TOKEN/REPO)" });
 
     const raw = await request.text();
