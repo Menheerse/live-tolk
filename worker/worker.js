@@ -11,13 +11,13 @@
  *   ALLOWED_ORIGIN  (Text)    bijv. https://menheerse.github.io
  *   DEEPL_KEY       (Secret)  optioneel: DeepL API-sleutel; dan vertaalt /translate via DeepL
  *   GLOSSARY_URL    (Text)    optioneel: adres van de woordenlijst (standaard woordenlijst.json in de app-repository)
- *   TURN_KEY_ID     (Text)    optioneel: Cloudflare Realtime TURN-sleutel-ID (voor 'Op afstand' via netwerken die blokkeren)
- *   TURN_KEY_TOKEN  (Secret)  optioneel: bijbehorende API-token
  *
  * Routes:
  *   POST /           zinnen opslaan in GitHub
  *   POST /translate  {text, source, target} -> {text} via DeepL
- *   POST /ice        tijdelijke TURN-gegevens (24 uur geldig) voor de verbinding 'Op afstand'
+ *   GET  /room/CODE  websocket naar de gespreksruimte (Durable Object 'Room') voor 'Op afstand'
+ *
+ * Deze Worker wordt automatisch vanuit GitHub gepubliceerd (zie wrangler.jsonc in deze map).
  */
 
 /* DeepL wil bij sommige doeltalen een variant */
@@ -131,24 +131,16 @@ export default {
       new Response(JSON.stringify(obj), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
-    if (request.method === "GET") return reply(200, { ok: true, dienst: "Live Tolk tussenstation" });
+    if (request.method === "GET" && request.headers.get("Upgrade") === "websocket") {
+      if (!okOrigin) return new Response("Niet toegestaan", { status: 403 });
+      const m = new URL(request.url).pathname.match(/^\/room\/([A-Z0-9]{6})\/?$/);
+      if (!m) return new Response("Onbekende ruimte", { status: 404 });
+      if (!env.ROOMS) return new Response("geen-ruimte", { status: 501 });
+      return env.ROOMS.get(env.ROOMS.idFromName(m[1])).fetch(request);
+    }
+    if (request.method === "GET") return reply(200, { ok: true, dienst: "Live Tolk tussenstation", ruimtes: !!env.ROOMS, deepl: !!env.DEEPL_KEY });
     if (request.method !== "POST") return reply(405, { fout: "Alleen POST" });
     if (!okOrigin) return reply(403, { fout: "Niet toegestaan vanaf deze website" });
-
-    /* ---- TURN-gegevens voor 'Op afstand' ---- */
-    if (new URL(request.url).pathname.replace(/\/+$/, "") === "/ice") {
-      if (!env.TURN_KEY_ID || !env.TURN_KEY_TOKEN) return reply(501, { fout: "TURN niet ingesteld" });
-      const t = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID.trim()}/credentials/generate-ice-servers`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${env.TURN_KEY_TOKEN.trim()}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ ttl: 86400 }),
-      });
-      if (!t.ok) return reply(502, { fout: "TURN-gegevens niet gekregen", status: t.status });
-      const j = await t.json();
-      // poort 53 wordt door browsers geblokkeerd; die adressen weglaten
-      const ice = (j.iceServers || []).map(sv => ({ ...sv, urls: [].concat(sv.urls || []).filter(u => !/:53(\?|$)/.test(u)) })).filter(sv => sv.urls.length);
-      return reply(200, { iceServers: ice });
-    }
 
     /* ---- vertalen via DeepL ---- */
     if (new URL(request.url).pathname.replace(/\/+$/, "") === "/translate") {
@@ -206,3 +198,52 @@ export default {
     return reply(200, { ok: true, aantal: clean.length });
   },
 };
+
+/* ---- Gespreksruimte voor 'Op afstand' ----
+   Eén ruimte per gesprekscode, voor één maker en één deelnemer. Berichten van de één gaan
+   ongewijzigd naar de ander; de ruimte bewaart zelf niets. Toestellen die na een storing
+   terugkomen (zelfde sessie-id) nemen hun plek weer in. */
+export class Room {
+  constructor(state) {
+    this.state = state;
+    this.state.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
+  }
+  async fetch(request) {
+    const url = new URL(request.url);
+    const role = url.searchParams.get("role") === "maker" ? "maker" : "deelnemer";
+    const sid = (url.searchParams.get("id") || "").replace(/[^a-z0-9]/gi, "").slice(0, 16) || "x";
+    const [client, server] = Object.values(new WebSocketPair());
+    const tags = ws => this.state.getTags(ws);
+    let sockets = this.state.getWebSockets();
+
+    // zelfde toestel komt terug: oude verbinding opruimen
+    for (const ws of sockets) if (tags(ws).includes("id:" + sid)) { try { ws.close(4001, "vervangen"); } catch {} }
+    sockets = sockets.filter(ws => !tags(ws).includes("id:" + sid));
+
+    const makers = sockets.filter(ws => tags(ws).includes("maker"));
+    const joiners = sockets.filter(ws => tags(ws).includes("deelnemer"));
+    let err = null;
+    if (role === "maker" && makers.length) err = "in-gebruik";
+    if (role === "deelnemer" && !makers.length) err = "niet-gevonden";
+    if (role === "deelnemer" && joiners.length) err = "vol";
+    if (err) {
+      server.accept();
+      server.send(JSON.stringify({ t: "_sys", ev: "error", reden: err }));
+      server.close(4000, err);
+      return new Response(null, { status: 101, webSocket: client });
+    }
+    this.state.acceptWebSocket(server, [role, "id:" + sid]);
+    server.send(JSON.stringify({ t: "_sys", ev: "joined", peers: sockets.length }));
+    for (const ws of sockets) { try { ws.send(JSON.stringify({ t: "_sys", ev: "peer-joined" })); } catch {} }
+    return new Response(null, { status: 101, webSocket: client });
+  }
+  webSocketMessage(ws, msg) {
+    if (typeof msg !== "string" || msg.length > 20000 || msg === "ping") return;
+    for (const other of this.state.getWebSockets()) if (other !== ws) { try { other.send(msg); } catch {} }
+  }
+  webSocketClose(ws, code, reason) {
+    if (code !== 4001) for (const other of this.state.getWebSockets()) if (other !== ws) { try { other.send(JSON.stringify({ t: "_sys", ev: "peer-left" })); } catch {} }
+    try { ws.close(code === 1005 ? 1000 : code, reason); } catch {}
+  }
+  webSocketError(ws) { this.webSocketClose(ws, 1011, "fout"); }
+}

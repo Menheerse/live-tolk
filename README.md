@@ -13,6 +13,15 @@ Werkt in Google Chrome of Microsoft Edge (spraakherkenning). Vereist internet.
 2. Ga naar **Settings → Pages**, kies bij *Source* "Deploy from a branch", branch `main`, map `/ (root)`, en klik **Save**.
 3. Na 1–2 minuten staat de app op `https://<gebruikersnaam>.github.io/live-tolk/`.
 
+## Op afstand (gespreksruimte)
+Beide toestellen maken een websocketverbinding met de Worker (`/room/CODE`). Een Durable Object
+(`Room`) geeft berichten door tussen maker en deelnemer. Geen directe verbinding nodig, dus werkt op
+elk netwerk; na een storing wordt automatisch opnieuw verbonden.
+
+## Worker publiceren
+De Worker staat in `worker/` en wordt via Cloudflare Builds automatisch vanuit GitHub gepubliceerd
+(`worker/wrangler.jsonc`, root directory `worker`, deploy command `npx wrangler deploy`).
+
 ## Teksten bewaren (tussenstation)
 De app stuurt zinnen naar een Cloudflare Worker (`worker/worker.js`), die ze in de privé-repository
 `live-tolk-data` zet. De GitHub-sleutel staat alleen als geheime instelling in Cloudflare, nooit in deze
