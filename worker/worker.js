@@ -17,7 +17,7 @@
  *   POST /translate  {text, source, target} -> {text} via DeepL
  *   GET  /room/CODE  websocket naar de gespreksruimte (Durable Object 'Room') voor 'Op afstand'
  *
- * Deze Worker wordt automatisch vanuit GitHub gepubliceerd (zie wrangler.jsonc in deze map).
+ * Deze Worker wordt automatisch vanuit GitHub gepubliceerd via Cloudflare Builds (zie wrangler.jsonc in deze map).
  */
 
 /* DeepL wil bij sommige doeltalen een variant */
