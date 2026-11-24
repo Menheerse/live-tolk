@@ -548,10 +548,23 @@ function rLog(event,detail,ms){
     ms:ms??(R.t0?Math.round(performance.now()-R.t0):undefined)});
   if(store.chk.ghAuto!==false)ghSend(true);
 }
+/* Verbindingsservers: STUN om elkaar te vinden; TURN (via ons tussenstation, Cloudflare) als tussenstation
+   wanneer een netwerk directe verbindingen blokkeert. Zonder TURN werkt het alleen op 'open' netwerken. */
+const STUN=[{urls:["stun:stun.cloudflare.com:3478","stun:stun.l.google.com:19302"]}];
+async function iceServers(){
+  const base=($("ghUrl").value.trim()||WORKER_URL).replace(/\/+$/,"");
+  const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),4000);
+  try{
+    const r=await fetch(base+"/ice",{method:"POST",headers:{"Content-Type":"text/plain"},body:"{}",signal:ctl.signal});
+    if(r.ok){const j=await r.json();if(Array.isArray(j.iceServers)&&j.iceServers.length){R.turn=true;return [...STUN,...j.iceServers]}}
+  }catch(e){}finally{clearTimeout(tm)}
+  R.turn=false;return STUN;
+}
 async function freshPeer(id,role){
   rReset();R.role=role;R.t0=performance.now();
   try{await loadPeer()}catch(e){rStatus("Kon de verbindingsmodule niet laden. Controleer je internet.");rLog("mislukt","verbindingsmodule niet geladen");R.role="";return null}
-  R.peer=id?new Peer(id):new Peer();return R.peer;
+  const config={iceServers:await iceServers()};
+  R.peer=id?new Peer(id,{config}):new Peer({config});return R.peer;
 }
 const ABC="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const newCode=()=>Array.from({length:6},()=>ABC[Math.floor(Math.random()*ABC.length)]).join("");
@@ -581,9 +594,9 @@ const send=o=>{if(R.conn&&R.conn.open)R.conn.send(o)};
 function setupConn(conn){
   R.conn=conn;showChat(true);state("Verbinden…");
   clearTimeout(R.openTimer);
-  R.openTimer=setTimeout(()=>{if(R.conn===conn&&!conn.open){rLog("mislukt","time-out: geen directe verbinding na 20 s");state("Verbinding lukt niet","bad");
+  R.openTimer=setTimeout(()=>{if(R.conn===conn&&!conn.open){rLog("mislukt","time-out: geen verbinding na 20 s ("+(R.turn?"met":"zonder")+" TURN)");rMic(false);state("Verbinding lukt niet","bad");
     rStatus("Er komt geen directe verbinding tot stand. Het netwerk blokkeert dit mogelijk; probeer een ander netwerk (bijv. mobiel internet i.p.v. wifi).")}},20000);
-  conn.on("open",()=>{clearTimeout(R.openTimer);R.connectedAt=performance.now();rLog("verbonden");
+  conn.on("open",()=>{clearTimeout(R.openTimer);R.connectedAt=performance.now();rLog("verbonden",R.turn?"met TURN beschikbaar":"zonder TURN");
     send({t:"hello",name:rName(),lang:rLang()});state("Verbonden","ok");rStatus("");rMic(true)});
   conn.on("data",onData);
   conn.on("close",()=>{
@@ -646,7 +659,7 @@ function rReset(){
   Object.assign(R,{peer:null,conn:null,other:null,mine:[],theirs:[],live:"",role:"",t0:0,connectedAt:0,leaving:false});$("rCodeBox").hidden=true}
 $("rNew").onclick=rNew;$("rJoin").onclick=rJoin;
 $("rJoinCode").onkeydown=e=>{if(e.key==="Enter")rJoin()};
-$("rMic").onclick=()=>rMic(!R.on);
+$("rMic").onclick=()=>{if(!R.on&&!(R.conn&&R.conn.open)){rStatus("De microfoon gaat aan zodra jullie verbonden zijn.");return}rMic(!R.on)};
 $("rLeave").onclick=()=>{rReset();showChat(false);rStatus("Gesprek beëindigd")};
 
 /* ---------- TOESPRAAK (één spreker, doorlopend) ---------- */

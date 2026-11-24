@@ -11,10 +11,13 @@
  *   ALLOWED_ORIGIN  (Text)    bijv. https://menheerse.github.io
  *   DEEPL_KEY       (Secret)  optioneel: DeepL API-sleutel; dan vertaalt /translate via DeepL
  *   GLOSSARY_URL    (Text)    optioneel: adres van de woordenlijst (standaard woordenlijst.json in de app-repository)
+ *   TURN_KEY_ID     (Text)    optioneel: Cloudflare Realtime TURN-sleutel-ID (voor 'Op afstand' via netwerken die blokkeren)
+ *   TURN_KEY_TOKEN  (Secret)  optioneel: bijbehorende API-token
  *
  * Routes:
  *   POST /           zinnen opslaan in GitHub
  *   POST /translate  {text, source, target} -> {text} via DeepL
+ *   POST /ice        tijdelijke TURN-gegevens (24 uur geldig) voor de verbinding 'Op afstand'
  */
 
 /* DeepL wil bij sommige doeltalen een variant */
@@ -131,6 +134,21 @@ export default {
     if (request.method === "GET") return reply(200, { ok: true, dienst: "Live Tolk tussenstation" });
     if (request.method !== "POST") return reply(405, { fout: "Alleen POST" });
     if (!okOrigin) return reply(403, { fout: "Niet toegestaan vanaf deze website" });
+
+    /* ---- TURN-gegevens voor 'Op afstand' ---- */
+    if (new URL(request.url).pathname.replace(/\/+$/, "") === "/ice") {
+      if (!env.TURN_KEY_ID || !env.TURN_KEY_TOKEN) return reply(501, { fout: "TURN niet ingesteld" });
+      const t = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID.trim()}/credentials/generate-ice-servers`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${env.TURN_KEY_TOKEN.trim()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ttl: 86400 }),
+      });
+      if (!t.ok) return reply(502, { fout: "TURN-gegevens niet gekregen", status: t.status });
+      const j = await t.json();
+      // poort 53 wordt door browsers geblokkeerd; die adressen weglaten
+      const ice = (j.iceServers || []).map(sv => ({ ...sv, urls: [].concat(sv.urls || []).filter(u => !/:53(\?|$)/.test(u)) })).filter(sv => sv.urls.length);
+      return reply(200, { iceServers: ice });
+    }
 
     /* ---- vertalen via DeepL ---- */
     if (new URL(request.url).pathname.replace(/\/+$/, "") === "/translate") {
