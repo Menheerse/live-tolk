@@ -489,26 +489,36 @@ function loadPeer(){
   if(window.Peer)return Promise.resolve();
   return new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js";sc.onload=res;sc.onerror=rej;document.head.appendChild(sc)});
 }
-async function freshPeer(id){
-  try{await loadPeer()}catch(e){rStatus("Kon de verbindingsmodule niet laden. Controleer je internet.");return null}
-  rReset();R.peer=id?new Peer(id):new Peer();return R.peer;
+/* Verbindingspogingen vastleggen (geen gesprekstekst): modus "verbinding",
+   gesproken = gebeurtenis, vertaling = reden/details, ms = tijd sinds start poging of duur gesprek */
+function rLog(event,detail,ms){
+  keepRecord({modus:"verbinding",spreker:R.role||"",van:rLang(),naar:R.other?R.other.lang:"",gesproken:event,vertaling:detail||"",
+    ms:ms??(R.t0?Math.round(performance.now()-R.t0):undefined)});
+  if(store.chk.ghAuto!==false)ghSend(true);
+}
+async function freshPeer(id,role){
+  rReset();R.role=role;R.t0=performance.now();
+  try{await loadPeer()}catch(e){rStatus("Kon de verbindingsmodule niet laden. Controleer je internet.");rLog("mislukt","verbindingsmodule niet geladen");R.role="";return null}
+  R.peer=id?new Peer(id):new Peer();return R.peer;
 }
 const ABC="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const newCode=()=>Array.from({length:6},()=>ABC[Math.floor(Math.random()*ABC.length)]).join("");
 function state(t,c=""){$("rState").className="pill "+c;$("rState").lastElementChild.textContent=t}
 function peerError(e){
+  rLog("mislukt",e.type+(e.message?": "+String(e.message).slice(0,120):""));
   rStatus({"peer-unavailable":"Code niet gevonden. Controleer de code, of laat de ander een nieuwe code maken.","network":"Geen verbinding met de server. Controleer je internet.","browser-incompatible":"Deze browser ondersteunt dit niet."}[e.type]||("Fout: "+e.type));
   state("Niet verbonden","bad");
 }
 async function rNew(){
-  const c=newCode(),peer=await freshPeer("livetolk-"+c);if(!peer)return;
-  peer.on("open",()=>{$("rCode").textContent=c;$("rCodeBox").hidden=false;rStatus("")});
+  const c=newCode(),peer=await freshPeer("livetolk-"+c,"maker");if(!peer)return;
+  peer.on("open",()=>{$("rCode").textContent=c;$("rCodeBox").hidden=false;rStatus("");rLog("code gemaakt")});
   peer.on("connection",conn=>{if(R.conn&&R.conn.open)conn.close();else setupConn(conn)});
   peer.on("error",e=>e.type==="unavailable-id"?rNew():peerError(e));
 }
 async function rJoin(){
   const c=$("rJoinCode").value.trim().toUpperCase();if(c.length<6)return rStatus("Vul de code van 6 tekens in.");
-  const peer=await freshPeer();if(!peer)return;
+  const peer=await freshPeer(null,"deelnemer");if(!peer)return;
+  rLog("deelnemen geprobeerd");
   rStatus("Verbinden…");
   peer.on("open",()=>setupConn(peer.connect("livetolk-"+c,{reliable:true})));
   peer.on("error",peerError);
@@ -516,10 +526,16 @@ async function rJoin(){
 const send=o=>{if(R.conn&&R.conn.open)R.conn.send(o)};
 function setupConn(conn){
   R.conn=conn;showChat(true);state("Verbinden…");
-  conn.on("open",()=>{send({t:"hello",name:rName(),lang:rLang()});state("Verbonden","ok");rStatus("");rMic(true)});
+  clearTimeout(R.openTimer);
+  R.openTimer=setTimeout(()=>{if(R.conn===conn&&!conn.open){rLog("mislukt","time-out: geen directe verbinding na 20 s");state("Verbinding lukt niet","bad");
+    rStatus("Er komt geen directe verbinding tot stand. Het netwerk blokkeert dit mogelijk; probeer een ander netwerk (bijv. mobiel internet i.p.v. wifi).")}},20000);
+  conn.on("open",()=>{clearTimeout(R.openTimer);R.connectedAt=performance.now();rLog("verbonden");
+    send({t:"hello",name:rName(),lang:rLang()});state("Verbonden","ok");rStatus("");rMic(true)});
   conn.on("data",onData);
-  conn.on("close",()=>{state("Verbinding verbroken","bad");rMic(false);rStatus("De ander heeft het gesprek verlaten of de verbinding is weggevallen.")});
-  conn.on("error",()=>state("Verbindingsfout","bad"));
+  conn.on("close",()=>{
+    if(R.connectedAt&&R.conn===conn){rLog("verbroken",R.leaving?"zelf beëindigd":"door ander of netwerk",Math.round(performance.now()-R.connectedAt));R.connectedAt=0}
+    state("Verbinding verbroken","bad");rMic(false);rStatus("De ander heeft het gesprek verlaten of de verbinding is weggevallen.")});
+  conn.on("error",e=>{state("Verbindingsfout","bad");rLog("mislukt","verbindingsfout"+(e&&e.type?": "+e.type:""))});
 }
 function onData(d){
   if(!d||typeof d!=="object")return;
@@ -568,7 +584,12 @@ function rMic(on){
   if(on)startR();else{killRec(R.rec);R.rec=null;R.myLive="";send({t:"live",text:""});renderR()}
 }
 function showChat(c){$("rSetup").hidden=c;$("rChat").hidden=!c;renderR()}
-function rReset(){rMic(false);try{R.conn&&R.conn.close()}catch(e){}try{R.peer&&R.peer.destroy()}catch(e){}Object.assign(R,{peer:null,conn:null,other:null,mine:[],theirs:[],live:""});$("rCodeBox").hidden=true}
+function rReset(){
+  rMic(false);clearTimeout(R.openTimer);
+  if(R.connectedAt){rLog("verbroken","zelf beëindigd",Math.round(performance.now()-R.connectedAt));R.connectedAt=0}
+  if(R.peer&&R.role&&!R.connectedAt&&!(R.conn&&R.conn.open))rLog("gestopt zonder verbinding",R.role==="maker"?"niemand heeft deelgenomen":"verbinding niet tot stand gekomen");
+  R.leaving=true;try{R.conn&&R.conn.close()}catch(e){}try{R.peer&&R.peer.destroy()}catch(e){}
+  Object.assign(R,{peer:null,conn:null,other:null,mine:[],theirs:[],live:"",role:"",t0:0,connectedAt:0,leaving:false});$("rCodeBox").hidden=true}
 $("rNew").onclick=rNew;$("rJoin").onclick=rJoin;
 $("rJoinCode").onkeydown=e=>{if(e.key==="Enter")rJoin()};
 $("rMic").onclick=()=>rMic(!R.on);
@@ -642,7 +663,7 @@ $("ghUrl").value=store.ghUrl||WORKER_URL;
 $("ghUrl").onchange=()=>{store.ghUrl=$("ghUrl").value.trim();save()};
 persist("ghAuto",true);
 /* bij wegklikken / scherm uit: resterende zinnen nog versturen */
-document.addEventListener("visibilitychange",()=>{if(document.hidden&&store.chk.ghAuto!==false)ghSend(true,true)});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)return;if(R.peer&&R.role&&!R.connectedAt)keepRecord({modus:"verbinding",spreker:R.role,van:rLang(),gesproken:"app (tijdelijk) verlaten tijdens wachten",ms:Math.round(performance.now()-R.t0)});if(store.chk.ghAuto!==false)ghSend(true,true)});
 if(!store.device){store.device=Math.random().toString(36).slice(2,8);save()}
 try{localStorage.removeItem("livetolk-ghtoken")}catch(e){}  /* oude sleutel van dit toestel opruimen */
 let ghBusy=false;
