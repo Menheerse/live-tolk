@@ -94,6 +94,15 @@ input[type=text],input[type=password]{width:100%}
 /* tegenover elkaar */
 .facing{display:grid;grid-template-rows:1fr 1fr;gap:10px;height:min(78vh,900px)}
 .half{border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--soft);border:3px solid var(--c);overflow:hidden}
+.step{border:2px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:14px;transition:border-color .3s,box-shadow .3s}
+.step.todo{border-color:#f39c33;box-shadow:0 0 0 4px #f39c3333}
+.stephint{margin:0 0 10px;font-size:15px}
+.step.todo .stephint{color:#b25e00}
+.step:not(.todo) .stephint{color:#1f8a52}
+.need{border-color:#f39c33!important;box-shadow:0 0 0 3px #f39c3355;animation:glow 1.4s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:0 0 0 6px #f39c3322}}
+@media (prefers-reduced-motion:reduce){.need{animation:none}}
+.rsetup.locked{opacity:.4;filter:grayscale(.6);pointer-events:none;user-select:none}
 .rsetup{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:14px}
 .card{border:1px solid var(--line);border-radius:16px;padding:18px;display:grid;gap:12px;align-content:start}
 .card h2{font:700 20px/1.2 "Space Grotesk",sans-serif;margin:0}
@@ -162,9 +171,12 @@ input[type=text],input[type=password]{width:100%}
   <!-- OP AFSTAND -->
   <section id="remote" hidden>
     <div id="rSetup">
-      <div class="top">
-        <label>Mijn naam<input type="text" id="rName" maxlength="30" placeholder="Bijv. Jan"></label>
-        <label>Mijn taal<select id="rLang"></select></label>
+      <div class="step" id="rStep">
+        <p class="stephint" id="rHint"><b>Stap 1</b> – vul eerst je naam in en kies je taal</p>
+        <div class="top" style="margin:0">
+          <label>Mijn naam<input type="text" id="rName" maxlength="30" placeholder="Bijv. Jan" autocomplete="given-name"></label>
+          <label>Mijn taal<select id="rLang"></select></label>
+        </div>
       </div>
       <div class="rsetup">
         <div class="card">
@@ -483,9 +495,21 @@ $("cCopy").onclick=()=>copy(log.map(e=>`${e.time} ${e.who}: ${e.text}\n`+Object.
 /* ---------- OP AFSTAND (twee apparaten) ---------- */
 const R={peer:null,conn:null,other:null,rec:null,on:false,speaking:false,mine:[],theirs:[],live:"",myLive:"",q:Promise.resolve()};
 const rStatus=statusOf("rStatus"),rSpeak=persist("rSpeak",true);
-$("rLang").innerHTML=opts(store.rLang||"nl-NL");$("rName").value=store.rName||"";
-const rLang=()=>$("rLang").value,rName=()=>$("rName").value.trim()||"Ik";
-$("rLang").onchange=$("rName").oninput=()=>{store.rLang=rLang();store.rName=$("rName").value;save()};
+$("rLang").innerHTML=`<option value="" disabled${store.rLang?"":" selected"}>Kies je taal…</option>`+opts(store.rLang||"");$("rName").value=store.rName||"";
+const rLang=()=>$("rLang").value||"nl-NL",rName=()=>$("rName").value.trim()||"Ik";
+/* Eerst naam en taal; pas daarna kun je een gesprek starten of deelnemen */
+const rReady=()=>!!($("rName").value.trim()&&$("rLang").value);
+function rCheck(){
+  const n=!$("rName").value.trim(),l=!$("rLang").value,ok=!n&&!l;
+  $("rName").classList.toggle("need",n);$("rLang").classList.toggle("need",!n&&l);
+  $("rStep").classList.toggle("todo",!ok);
+  $("rHint").innerHTML=ok?"<b>Stap 1 klaar</b> – maak nu een gesprekscode of doe mee met een code"
+    :n?"<b>Stap 1</b> – vul eerst je naam in":"<b>Stap 1</b> – kies nu je taal";
+  document.querySelector(".rsetup").classList.toggle("locked",!ok);
+  for(const id of ["rNew","rJoin","rJoinCode"])$(id).disabled=!ok;
+}
+$("rLang").onchange=$("rName").oninput=()=>{store.rLang=$("rLang").value;store.rName=$("rName").value;save();rCheck()};
+rCheck();
 function loadPeer(){
   if(window.Peer)return Promise.resolve();
   return new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js";sc.onload=res;sc.onerror=rej;document.head.appendChild(sc)});
@@ -511,12 +535,14 @@ function peerError(e){
   state("Niet verbonden","bad");
 }
 async function rNew(){
+  if(!rReady())return rCheck();
   const c=newCode(),peer=await freshPeer("livetolk-"+c,"maker");if(!peer)return;
   peer.on("open",()=>{$("rCode").textContent=c;$("rCodeBox").hidden=false;rStatus("");rLog("code gemaakt")});
   peer.on("connection",conn=>{if(R.conn&&R.conn.open)conn.close();else setupConn(conn)});
   peer.on("error",e=>e.type==="unavailable-id"?rNew():peerError(e));
 }
 async function rJoin(){
+  if(!rReady())return rCheck();
   const c=$("rJoinCode").value.trim().toUpperCase();if(c.length<6)return rStatus("Vul de code van 6 tekens in.");
   const peer=await freshPeer(null,"deelnemer");if(!peer)return;
   rLog("deelnemen geprobeerd");
