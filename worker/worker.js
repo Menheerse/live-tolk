@@ -10,6 +10,7 @@
  *   REPO            (Text)    bijv. Menheerse/live-tolk-data
  *   ALLOWED_ORIGIN  (Text)    bijv. https://menheerse.github.io
  *   DEEPL_KEY       (Secret)  optioneel: DeepL API-sleutel; dan vertaalt /translate via DeepL
+ *   GLOSSARY_URL    (Text)    optioneel: adres van de woordenlijst (standaard woordenlijst.json in de app-repository)
  *
  * Routes:
  *   POST /           zinnen opslaan in GitHub
@@ -18,20 +19,94 @@
 
 /* DeepL wil bij sommige doeltalen een variant */
 const DEEPL_TARGET = { en: "EN-GB", pt: "PT-PT", zh: "ZH-HANS" };
+const GLOSSARY_URL = "https://raw.githubusercontent.com/Menheerse/live-tolk/main/woordenlijst.json";
+const GLOSSARY_REFRESH = 10 * 60 * 1000; // woordenlijst elke 10 minuten opnieuw controleren
+
+const deeplHost = key => key.trim().endsWith(":fx") ? "https://api-free.deepl.com" : "https://api.deepl.com";
+const deeplHeaders = key => ({ "Authorization": `DeepL-Auth-Key ${key.trim()}`, "Content-Type": "application/json", "User-Agent": "live-tolk-worker" });
+
+/* ---- bouwwoordenlijst -> DeepL-woordenlijst (glossary) ----
+   Leest woordenlijst.json, maakt per talenpaar een woordenboek en zet dat als één meertalige
+   DeepL-woordenlijst klaar. Bij een gewijzigde lijst komt er een nieuwe (naam bevat een hash)
+   en worden oude Live Tolk-lijsten opgeruimd. Lukt dit niet, dan wordt gewoon zonder vertaald. */
+let gl = { checked: 0, hash: "", id: null, pairs: new Set(), busy: null };
+
+function buildDictionaries(data) {
+  const langs = (data.talen || []).map(l => String(l).toLowerCase());
+  const terms = Array.isArray(data.termen) ? data.termen : [];
+  const clean = v => String(v || "").replace(/[\t\r\n]/g, " ").trim();
+  const dicts = [];
+  for (const a of langs) for (const b of langs) {
+    if (a === b) continue;
+    const seen = new Set(), lines = [];
+    for (const t of terms) {
+      const src = clean(t[a]), dst = clean(t[b]);
+      if (!src || !dst) continue;
+      if (a !== "nl" && b !== "nl") continue;               // alleen paren met Nederlands
+      if (a !== "nl" && t.alleenVanuitNL) continue;          // dubbelzinnig: niet terugvertalen
+      const k = src.toLowerCase(); if (seen.has(k)) continue; seen.add(k);
+      lines.push(`${src}\t${dst}`);
+    }
+    if (lines.length) dicts.push({ source_lang: a, target_lang: b, entries: lines.join("\n"), entries_format: "tsv" });
+  }
+  return dicts;
+}
+
+async function sha(text) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(d)].slice(0, 6).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function refreshGlossary(env) {
+  const key = env.DEEPL_KEY, host = deeplHost(key);
+  const r = await fetch(env.GLOSSARY_URL || GLOSSARY_URL, { headers: { "User-Agent": "live-tolk-worker" }, cf: { cacheTtl: 60 } });
+  if (!r.ok) throw new Error("woordenlijst niet gevonden");
+  const raw = await r.text();
+  const hash = await sha(raw);
+  if (hash === gl.hash && gl.id) return;
+  const dicts = buildDictionaries(JSON.parse(raw));
+  const name = `live-tolk-${hash}`;
+
+  const list = await fetch(`${host}/v3/glossaries`, { headers: deeplHeaders(key) });
+  const existing = list.ok ? ((await list.json()).glossaries || []) : [];
+  let id = existing.find(g => g.name === name)?.glossary_id;
+  if (!id && dicts.length) {
+    const c = await fetch(`${host}/v3/glossaries`, { method: "POST", headers: deeplHeaders(key), body: JSON.stringify({ name, dictionaries: dicts }) });
+    if (!c.ok) throw new Error("woordenlijst aanmaken mislukt: " + c.status);
+    id = (await c.json()).glossary_id;
+  }
+  // oude Live Tolk-woordenlijsten opruimen
+  for (const g of existing) if (g.name?.startsWith("live-tolk-") && g.name !== name)
+    await fetch(`${host}/v3/glossaries/${g.glossary_id}`, { method: "DELETE", headers: deeplHeaders(key) }).catch(() => {});
+  gl = { ...gl, hash, id, pairs: new Set(dicts.map(d => `${d.source_lang}>${d.target_lang}`)) };
+}
+
+async function glossaryFor(env, source, target) {
+  if (Date.now() - gl.checked > GLOSSARY_REFRESH) {
+    gl.checked = Date.now();
+    gl.busy = refreshGlossary(env).catch(e => { console.log("woordenlijst:", e.message); }).finally(() => { gl.busy = null; });
+  }
+  if (gl.busy && !gl.id) await gl.busy;           // eerste keer: even wachten op de lijst
+  return gl.id && gl.pairs.has(`${source}>${target}`) ? gl.id : null;
+}
 
 async function deeplTranslate(env, text, source, target) {
   const key = env.DEEPL_KEY;
-  const host = key.trim().endsWith(":fx") ? "https://api-free.deepl.com" : "https://api.deepl.com";
+  const host = deeplHost(key);
   const body = { text: [text], target_lang: DEEPL_TARGET[target] || target.toUpperCase() };
-  if (source) body.source_lang = source.toUpperCase();
-  const r = await fetch(`${host}/v2/translate`, {
-    method: "POST",
-    headers: { "Authorization": `DeepL-Auth-Key ${key.trim()}`, "Content-Type": "application/json", "User-Agent": "live-tolk-worker" },
-    body: JSON.stringify(body),
-  });
+  if (source) {
+    body.source_lang = source.toUpperCase();
+    const gid = await glossaryFor(env, source.toLowerCase(), target);
+    if (gid) body.glossary_id = gid;
+  }
+  let r = await fetch(`${host}/v2/translate`, { method: "POST", headers: deeplHeaders(key), body: JSON.stringify(body) });
+  if (!r.ok && body.glossary_id) {                 // woordenlijst geweigerd? dan zonder opnieuw
+    delete body.glossary_id;
+    r = await fetch(`${host}/v2/translate`, { method: "POST", headers: deeplHeaders(key), body: JSON.stringify(body) });
+  }
   if (!r.ok) return { status: r.status };
   const j = await r.json();
-  return { status: 200, text: j.translations?.[0]?.text ?? "" };
+  return { status: 200, text: j.translations?.[0]?.text ?? "", woordenlijst: !!body.glossary_id };
 }
 
 const MAX_BODY = 200_000;   // bytes per verzending
@@ -68,7 +143,7 @@ export default {
       if (!text || !target) return reply(400, { fout: "text en target zijn verplicht" });
       const res = await deeplTranslate(env, text, source, target);
       if (res.status !== 200) return reply(res.status === 400 ? 422 : 502, { fout: "DeepL weigerde", status: res.status });
-      return reply(200, { text: res.text, dienst: "deepl" });
+      return reply(200, { text: res.text, dienst: "deepl", woordenlijst: res.woordenlijst });
     }
     if (!env.GITHUB_TOKEN || !env.REPO) return reply(500, { fout: "Worker is niet ingesteld (GITHUB_TOKEN/REPO)" });
 
