@@ -165,6 +165,42 @@ input[type=text],input[type=password]{width:100%}
 /* tegenover elkaar: bovenste helft gedraaid voor wie aan de overkant zit */
 .half.flip{transform:rotate(180deg)}
 @media(max-width:700px){.panes{grid-template-columns:1fr}.pane{min-height:200px;max-height:none}.out{order:-1}.status{margin-left:0;width:100%}.log{max-height:none;min-height:260px}}
+
+/* ================= Computer (≥1100 px): zijbalk links, gesprek rechts ================= */
+.tagline,.modehead{display:none}
+@media (min-width:1100px){
+  body{background:light-dark(#f3f5f7,#0b0c0d)}
+  .wrap{max-width:none;margin:0;padding:0;display:grid;grid-template-columns:290px minmax(0,1fr);column-gap:0;min-height:100vh;align-content:start}
+  .wrap>*:not(.head){grid-column:2;margin-left:clamp(28px,3vw,48px);margin-right:clamp(28px,3vw,48px);max-width:1500px}
+  .head{grid-column:1;grid-row:1/span 30;position:sticky;top:0;height:100vh;margin:0;padding:28px 20px 22px;
+    background:#0e2f45;color:#fff;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:26px;flex-wrap:nowrap}
+  .brand{flex-direction:column;align-items:flex-start;gap:16px}
+  .brand .logo{background:#fff;border-radius:12px;padding:8px 12px;height:64px}
+  .brand .logo.partner{order:3;height:70px}
+  .brand h1{order:2;border:0;padding:0;color:#fff;font-size:34px;line-height:1.05}
+  .tagline{display:block;font:500 14px Inter,sans-serif;color:#b9c7d3;margin-top:6px}
+  .tabs{display:flex!important;flex-direction:column;gap:8px;width:100%!important;flex:1}
+  .tabs button{justify-content:flex-start;gap:12px;min-height:52px;padding:0 16px;font-size:16px;background:transparent;color:#dfe7ee;
+    border:0;border-radius:12px;box-shadow:none}
+  .tabs button svg{width:22px;height:22px}
+  .tabs button:hover{background:#ffffff14;border:0}
+  .tabs button:active{transform:none}
+  .tabs button[aria-selected=true]{background:#fff;color:#0e2f45;box-shadow:inset 4px 0 0 #e46f2a}
+  :root[data-theme=dark] .tabs button[aria-selected=true]{background:#fff;color:#0e2f45}
+  .helpbtn{margin-top:auto;color:#ffb784!important;border:1px solid #ffb78466!important}
+  .helpbtn:hover{background:#e46f2a22!important}
+  .modehead{display:block;padding-top:30px;margin-bottom:16px}
+  .modehead h2{font:700 30px/1.1 "Space Grotesk",sans-serif;margin:0}
+  .modehead p{margin:6px 0 0;color:var(--mut);font-size:15px}
+  section#conv,section#remote,section#talk,.keep{background:var(--bg);border-radius:18px;padding:22px 24px;box-shadow:0 1px 2px #0000000d,0 4px 18px #0000000a}
+  .keep{margin-top:18px;margin-bottom:28px}
+  .warn,.browserwarn{margin-top:6px}
+  .half .line{font-size:24px}
+  .rhalves{gap:16px}
+  .log{background:var(--soft);border:0}
+  .pane{max-height:none;height:var(--fit,62vh)}
+}
+@media (prefers-color-scheme:dark){@media (min-width:1100px){:root:not([data-theme=light]) .tabs button[aria-selected=true]{background:#fff;color:#0e2f45}}}
 </style>
 </head>
 <body>
@@ -243,7 +279,7 @@ input[type=text],input[type=password]{width:100%}
 <div class="viewer" id="viewer" hidden><img id="viewerImg" alt="Foto groot"><span>Tik om te sluiten</span></div>
 <div class="wrap">
   <div class="head">
-    <div class="brand"><img src="logo.png" alt="B-IM Menheerse – Bouw- en Informatiemanagement" class="logo" width="383" height="160"><h1>Live Tolk</h1><img src="denijs.png" alt="De Nijs bouw en ontwikkeling" class="logo partner" width="323" height="200"></div>
+    <div class="brand"><img src="logo.png" alt="B-IM Menheerse – Bouw- en Informatiemanagement" class="logo" width="383" height="160"><h1>Live Tolk<span class="tagline">Spraak direct vertaald</span></h1><img src="denijs.png" alt="De Nijs bouw en ontwikkeling" class="logo partner" width="323" height="200"></div>
     <div class="tabs" role="tablist">
       <button role="tab" id="tabConv" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3v-3H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M17 9h3a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-4-3h-3"/></svg>Gesprek</button>
       <button role="tab" id="tabRemote" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="7" height="13" rx="1.5"/><rect x="15" y="7" width="7" height="13" rx="1.5"/><path d="M10.5 9.5c1.2-1 2.8-1 4 0M11.5 12c.6-.4 1.4-.4 2 0"/></svg>Op afstand</button>
@@ -251,6 +287,7 @@ input[type=text],input[type=password]{width:100%}
       <button class="helpbtn" id="helpBtn" aria-haspopup="dialog" title="Uitleg"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.2-2.5 3.8"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/></svg>Help</button>
     </div>
   </div>
+  <div class="modehead"><h2 id="modeTitle">Gesprek</h2><p id="modeSub"></p></div>
   <div class="warn" id="warn"></div>
   <div class="browserwarn" id="browserWarn" hidden>
     <p><strong>Deze browser ondersteunt geen spraakherkenning.</strong> <span id="browserName"></span> Open Live Tolk in <strong>Google Chrome</strong>.</p>
@@ -614,6 +651,10 @@ function tab(n){
   stopConv();stopTalk(true);rMic(false,true);hush();
   for(const k in TABS){$(TABS[k]).setAttribute("aria-selected",k===n);$(k).hidden=k!==n}
   store.tab=n;save();
+  const M={conv:["Gesprek","Samen bij één telefoon of computer – ieder tikt op zijn eigen knop."],
+           remote:["Op afstand","Ieder op een eigen toestel, verbonden met een gesprekscode."],
+           talk:["Toespraak","Eén spreker, doorlopend vertaald – bijvoorbeeld voor een toolboxmeeting."]}[n];
+  $("modeTitle").textContent=M[0];$("modeSub").textContent=M[1];
 }
 for(const k in TABS)$(TABS[k]).onclick=()=>tab(k);
 
@@ -1081,10 +1122,11 @@ function fit(el,below){
   el.style.setProperty("--fit",Math.max(0,Math.round(vh-top-(below||0)-12))+"px");
 }
 function fitAll(){
-  fit($("rChat").hidden?null:document.querySelector(".rhalves"));
+  const card=window.innerWidth>=1100?36:0;   // computer: ruimte voor de onderrand van de kaart
+  fit($("rChat").hidden?null:document.querySelector(".rhalves"),card);
   if(!$("conv").hidden){
-    if(!$("facing").hidden)fit($("facing"));
-    else fit($("log"),($("speakers").offsetHeight||0)+12);
+    if(!$("facing").hidden)fit($("facing"),card);
+    else fit($("log"),($("speakers").offsetHeight||0)+12+card);
   }
 }
 let fitRaf=0;const fitSoon=()=>{cancelAnimationFrame(fitRaf);fitRaf=requestAnimationFrame(fitAll)};
