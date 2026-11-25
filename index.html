@@ -223,7 +223,7 @@ input[type=text],input[type=password]{width:100%}
       <div class="rhalves">
         <div class="half" style="--c:#a9d4ff"><div class="ph"><span id="rOtherLbl">Gesprekspartner</span></div><div class="lines" id="rTheirs"></div></div>
         <div class="half" style="--c:#b8f5d0"><div class="ph"><span id="rMeLbl">Ik</span></div><div class="lines" id="rMine"></div>
-          <div class="microw"><button class="spk" id="rMic" style="--c:#b8f5d0"><span class="dot"></span><span>Microfoon aan</span></button>
+          <div class="microw"><button class="spk" id="rMic" style="--c:#b8f5d0"><span class="dot"></span><span>Tik om te praten</span></button>
           <label class="photo" id="rPhotoBtn" title="Foto maken met de camera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg><span>Camera</span><input type="file" id="rPhoto" accept="image/*" capture="environment" hidden></label>
           <label class="photo small" id="rGalleryBtn" title="Foto kiezen uit de galerij"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/></svg><span>Galerij</span><input type="file" id="rGallery" accept="image/*" hidden></label></div></div>
       </div>
@@ -646,7 +646,7 @@ function paired(){
   if(!R.connectedAt){R.connectedAt=performance.now();rLog(again?"opnieuw verbonden":"verbonden")}
   showChat(true);state("Verbonden","ok");rStatus("");
   send({t:"hello",name:rName(),lang:rLang()});
-  if(!again||!R.on)rMic(true);
+  /* microfoon gaat niet vanzelf aan: de gebruiker tikt zelf op de spreekknop */
 }
 function startSession(role,code){
   rReset();
@@ -735,7 +735,7 @@ function renderR(){
   scrollEnd($("rTheirs"),$("rMine"));
   $("rPhotoBtn").classList.toggle("off",!R.paired);$("rGalleryBtn").classList.toggle("off",!R.paired);
   $("rMic").classList.toggle("on",R.on);
-  $("rMic").lastElementChild.textContent=!R.on?"Microfoon aan":R.speaking?"Even stil: vertaling wordt voorgelezen":"Luistert… (tik = microfoon uit)";
+  $("rMic").lastElementChild.textContent=!R.on?(R.paired?"Tik om te praten":"Microfoon (na verbinden)"):R.speaking?"Even stil: vertaling wordt voorgelezen":"Luistert… (tik = stoppen)";
 }
 function startR(){
   if(R.speaking)return;
