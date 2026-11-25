@@ -356,13 +356,15 @@ const ONLINE=[
   async(t,a,b)=>{const j=await (await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(t)}&langpair=${a}|${b}`)).json();if(j.responseStatus!=200)throw 0;return j.responseData.translatedText}
 ];
 const ENGINES=["google","mymemory"];
-/* Volgorde: DeepL (beste kwaliteit) → Chrome op het apparaat → Google → MyMemory */
+/* Volgorde: DeepL (beste kwaliteit, via het tussenstation) → Google (reserve)
+   → Chrome op het apparaat (alleen als er geen internet is) → MyMemory (laatste redmiddel) */
 async function translate(t,from,to,meta={}){
   const a=code(from),b=code(to);if(a===b)return t;
   const t0=performance.now();let out=null,engine="mislukt";
   try{out=await viaDeepl(t,a,b);engine="deepl"}catch(e){}
+  if(out===null){try{out=await ONLINE[0](t,a,b);engine="google"}catch(e){}}
   if(out===null){const l=await getLocal(a,b);if(l){try{out=await l.translate(t);engine="chrome"}catch(e){}}}
-  for(let i=0;out===null&&i<ONLINE.length;i++){try{out=await ONLINE[i](t,a,b);engine=ENGINES[i]}catch(e){}}
+  if(out===null){try{out=await ONLINE[1](t,a,b);engine="mymemory"}catch(e){}}
   keepRecord({modus:store.tab||"conv",van:from,naar:to,gesproken:t,vertaling:out??"",vertaaldienst:engine,herkenning:meta.conf,ms:Math.round(performance.now()-t0),spreker:meta.who||""});
   return out??"⚠ Vertalen mislukt (geen internet?)";
 }
