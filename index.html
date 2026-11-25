@@ -71,6 +71,8 @@ input[type=text],input[type=password]{width:100%}
 .opts label{display:flex;flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:15px;min-height:44px}
 .opts input[type=checkbox]{width:20px;height:20px;accent-color:#3bbf7a}
 .status{font-size:14px;color:var(--mut);margin-left:auto}
+.browserwarn{background:#fde2cf;color:#6b2a00;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:grid;gap:10px;font-size:15px}
+.browserwarn p{margin:0}.browserwarn .mic{text-decoration:none;min-height:48px;border-radius:12px;justify-self:start}
 .warn{background:#fff3cd;color:#5c4400;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:none;font-size:15px}
 [hidden]{display:none!important}
 .keep{margin-top:22px;border-top:1px solid var(--line);padding-top:10px;font-size:15px}
@@ -166,6 +168,10 @@ input[type=text],input[type=password]{width:100%}
     </div>
   </div>
   <div class="warn" id="warn"></div>
+  <div class="browserwarn" id="browserWarn" hidden>
+    <p><strong>Deze browser ondersteunt geen spraakherkenning.</strong> <span id="browserName"></span> Open Live Tolk in <strong>Google Chrome</strong>.</p>
+    <a class="mic" id="openChrome" href="#">Openen in Chrome</a>
+  </div>
 
   <!-- GESPREK -->
   <section id="conv">
@@ -298,7 +304,16 @@ async function copy(text,st){try{await navigator.clipboard.writeText(text);st("G
 
 /* ---------- spraakherkenning (één helper voor alle standen) ---------- */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-if(!SR)warn("Deze browser ondersteunt geen spraakherkenning. Gebruik Google Chrome of Microsoft Edge.");
+/* Samsung Internet en Firefox hebben geen (werkende) spraakherkenning: meteen doorverwijzen naar Chrome */
+const UA=navigator.userAgent;
+const BAD_BROWSER=/SamsungBrowser/i.test(UA)?"Je gebruikt nu Samsung Internet.":/Firefox|FxiOS/i.test(UA)?"Je gebruikt nu Firefox.":(!SR?"":null);
+const ANDROID=/Android/i.test(UA);
+if(BAD_BROWSER!==null){
+  $("browserWarn").hidden=false;$("browserName").textContent=BAD_BROWSER;
+  const here=location.host+location.pathname+location.search;
+  $("openChrome").href=ANDROID?`intent://${here}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent("https://play.google.com/store/apps/details?id=com.android.chrome")};end`:"https://www.google.com/chrome/";
+  if(!ANDROID)$("openChrome").textContent="Chrome downloaden";
+}
 function killRec(r){if(!r)return;r.onend=r.onresult=r.onerror=null;try{r.abort()}catch(e){}}
 /* Ruis negeren: 1-2 woorden waar de herkenning zelf erg onzeker over is (bijv. tv of achtergrondgeluid).
    Sommige telefoons geven altijd 0 als zekerheid; dan wordt niets weggefilterd. */
@@ -338,7 +353,7 @@ function makeRec(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
     onInterim(it.trim()||pend)};
   r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){
     if(document.hidden||Date.now()-visibleAt<4000)return;   // net terug in de app: tijdelijk, geen melding
-    warn(MIC_WARN);onDenied()}};
+    if(BAD_BROWSER===null)warn(MIC_WARN);onDenied()}};
   r.onstart=()=>{if($("warn").textContent===MIC_WARN)$("warn").style.display="none"};
   r.onend=()=>{commit();onEnd()};
   try{r.start()}catch(e){}
