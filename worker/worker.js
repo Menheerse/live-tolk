@@ -201,8 +201,14 @@ export default {
 
 /* ---- Gespreksruimte voor 'Op afstand' ----
    Eén ruimte per gesprekscode, voor één maker en één deelnemer. Berichten van de één gaan
-   ongewijzigd naar de ander; de ruimte bewaart zelf niets. Toestellen die na een storing
-   terugkomen (zelfde sessie-id) nemen hun plek weer in. */
+   ongewijzigd naar de ander; de ruimte bewaart geen berichten, alleen tot wanneer de code geldig is.
+   Binnen die tijd kan ieder (ook na het sluiten van de app) met dezelfde code terugkomen. */
+const GELDIG = { dag: "dag", "24u": 24 * 3600e3, week: 7 * 24 * 3600e3 };
+function endOfDayAmsterdam(now) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
+    .formatToParts(new Date(now)).map(x => [x.type, +x.value]));
+  return now + ((23 - p.hour) * 3600 + (59 - p.minute) * 60 + (60 - p.second)) * 1000;
+}
 export class Room {
   constructor(state) {
     this.state = state;
@@ -212,28 +218,36 @@ export class Room {
     const url = new URL(request.url);
     const role = url.searchParams.get("role") === "maker" ? "maker" : "deelnemer";
     const sid = (url.searchParams.get("id") || "").replace(/[^a-z0-9]/gi, "").slice(0, 16) || "x";
+    const nieuw = url.searchParams.get("nieuw") === "1";
+    const geldig = GELDIG[url.searchParams.get("geldig")] ? url.searchParams.get("geldig") : "dag";
     const [client, server] = Object.values(new WebSocketPair());
-    const tags = ws => this.state.getTags(ws);
-    let sockets = this.state.getWebSockets();
+    const now = Date.now();
 
-    // zelfde toestel komt terug: oude verbinding opruimen
-    for (const ws of sockets) if (tags(ws).includes("id:" + sid)) { try { ws.close(4001, "vervangen"); } catch {} }
-    sockets = sockets.filter(ws => !tags(ws).includes("id:" + sid));
+    let meta = await this.state.storage.get("meta");
+    if (meta && meta.expires < now) { meta = null; await this.state.storage.delete("meta"); }
 
-    const makers = sockets.filter(ws => tags(ws).includes("maker"));
-    const joiners = sockets.filter(ws => tags(ws).includes("deelnemer"));
-    let err = null;
-    if (role === "maker" && makers.length) err = "in-gebruik";
-    if (role === "deelnemer" && !makers.length) err = "niet-gevonden";
-    if (role === "deelnemer" && joiners.length) err = "vol";
-    if (err) {
+    const refuse = err => {
       server.accept();
       server.send(JSON.stringify({ t: "_sys", ev: "error", reden: err }));
       server.close(4000, err);
       return new Response(null, { status: 101, webSocket: client });
+    };
+    if (nieuw && role === "maker") {
+      if (meta) return refuse("in-gebruik");          // code bestaat al: app kiest een andere
+      meta = { expires: geldig === "dag" ? endOfDayAmsterdam(now) : now + GELDIG[geldig], geldig };
+      await this.state.storage.put("meta", meta);
     }
+    if (!meta) return refuse(nieuw ? "in-gebruik" : "niet-gevonden");   // onbekend of verlopen
+
+    const tags = ws => this.state.getTags(ws);
+    let sockets = this.state.getWebSockets();
+    // zelfde toestel komt terug: oude verbinding opruimen
+    for (const ws of sockets) if (tags(ws).includes("id:" + sid)) { try { ws.close(4001, "vervangen"); } catch {} }
+    sockets = sockets.filter(ws => !tags(ws).includes("id:" + sid));
+    if (sockets.some(ws => tags(ws).includes(role))) return refuse(role === "maker" ? "in-gebruik" : "vol");
+
     this.state.acceptWebSocket(server, [role, "id:" + sid]);
-    server.send(JSON.stringify({ t: "_sys", ev: "joined", peers: sockets.length }));
+    server.send(JSON.stringify({ t: "_sys", ev: "joined", peers: sockets.length, expires: meta.expires }));
     for (const ws of sockets) { try { ws.send(JSON.stringify({ t: "_sys", ev: "peer-joined" })); } catch {} }
     return new Response(null, { status: 101, webSocket: client });
   }

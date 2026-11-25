@@ -112,6 +112,10 @@ input[type=text],input[type=password]{width:100%}
 .need{border-color:#f39c33!important;box-shadow:0 0 0 3px #f39c3355;animation:glow 1.4s ease-in-out infinite}
 @keyframes glow{50%{box-shadow:0 0 0 6px #f39c3322}}
 @media (prefers-reduced-motion:reduce){.need{animation:none}}
+.lastroom{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;border:2px solid #0e2f45;border-radius:16px;padding:14px 16px;margin-bottom:14px;font-size:15px}
+.codesm{font:700 18px "Space Grotesk",sans-serif;letter-spacing:.06em}
+.lost{background:#fde2cf;color:#6b2a00;border-radius:14px;padding:14px 16px;margin-bottom:10px;display:grid;gap:10px;font-size:15px}
+.lost p{margin:0}.lost .row{gap:8px}.lost .row>*{flex:1 1 160px}
 .rsetup.locked{opacity:.4;filter:grayscale(.6);pointer-events:none;user-select:none}
 .rsetup{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:14px}
 .card{border:1px solid var(--line);border-radius:16px;padding:18px;display:grid;gap:12px;align-content:start}
@@ -206,10 +210,15 @@ input[type=text],input[type=password]{width:100%}
           <label>Mijn taal<select id="rLang"></select></label>
         </div>
       </div>
+      <div class="lastroom" id="rLast" hidden>
+        <div><b>Laatste gesprek</b> · code <span class="codesm" id="rLastCode"></span><br><span id="rLastExp"></span></div>
+        <button class="mic" id="rLastBtn">Opnieuw verbinden</button>
+      </div>
       <div class="rsetup">
         <div class="card">
           <h2>Nieuw gesprek starten</h2>
-          <p>Je krijgt een code. Geef die door aan je gesprekspartner (bijv. via WhatsApp of telefoon).</p>
+          <p>Je krijgt een code. Geef die door aan je gesprekspartner (bijv. via WhatsApp of telefoon). Met dezelfde code kunnen jullie later opnieuw verbinden.</p>
+          <label>Code geldig<select id="rValid"><option value="dag">Vandaag (tot 24:00)</option><option value="24u">24 uur</option><option value="week">1 week</option></select></label>
           <button class="mic" id="rNew">Maak gesprekscode</button>
           <div id="rCodeBox" hidden><p>Gesprekscode</p><div class="codebig" id="rCode"></div><p>Wachten tot de ander deelneemt…</p></div>
         </div>
@@ -224,7 +233,12 @@ input[type=text],input[type=password]{width:100%}
       <div class="opts" style="margin:0 0 10px">
         <span class="pill" id="rState"><i></i><span>Verbinden…</span></span>
         <label><input type="checkbox" id="rSpeak" checked> Vertaling voorlezen</label>
+        <span class="pill" id="rCodePill" hidden></span>
         <button id="rLeave" style="margin-left:auto">Gesprek beëindigen</button>
+      </div>
+      <div class="lost" id="rLost" hidden>
+        <p id="rLostTxt"></p>
+        <div class="row"><button class="mic" id="rLostBack">Terug naar dit gesprek</button><button id="rLostNew">Nieuw gesprek</button></div>
       </div>
       <div class="rhalves">
         <div class="half" style="--c:#a9d4ff"><div class="ph"><span id="rOtherLbl">Gesprekspartner</span></div><div class="lines" id="rTheirs"></div></div>
@@ -620,7 +634,7 @@ function rCheck(){
   for(const id of ["rNew","rJoin","rJoinCode"])$(id).disabled=!ok;
 }
 $("rLang").onchange=$("rName").oninput=()=>{store.rLang=$("rLang").value;store.rName=$("rName").value;save();rCheck()};
-rCheck();
+rCheck();renderLast();
 /* Verbindingspogingen vastleggen (geen gesprekstekst): modus "verbinding",
    gesproken = gebeurtenis, vertaling = reden/details, ms = tijd sinds start poging of duur gesprek */
 function rLog(event,detail,ms){
@@ -634,10 +648,10 @@ function rLog(event,detail,ms){
 const ABC="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const newCode=()=>Array.from({length:6},()=>ABC[Math.floor(Math.random()*ABC.length)]).join("");
 function state(t,c=""){$("rState").className="pill "+c;$("rState").lastElementChild.textContent=t}
-const ERR={"niet-gevonden":"Code niet gevonden. Controleer de code, of laat de ander een nieuwe code maken.","vol":"Er zitten al twee mensen in dit gesprek.","in-gebruik":"Deze code is al in gebruik.","geen-ruimte":"Het tussenstation is nog niet ingesteld voor Op afstand.","netwerk":"Geen verbinding met het tussenstation. Controleer je internet."};
+const ERR={"verlopen":"Deze gesprekscode is verlopen. Start een nieuw gesprek.","niet-gevonden":"Code niet gevonden of verlopen. Controleer de code, of laat de ander een nieuwe code maken.","vol":"Er zitten al twee mensen in dit gesprek.","in-gebruik":"Deze code is al in gebruik.","geen-ruimte":"Het tussenstation is nog niet ingesteld voor Op afstand.","netwerk":"Geen verbinding met het tussenstation. Controleer je internet."};
 function wsUrl(){
   const base=($("ghUrl").value.trim()||WORKER_URL).replace(/\/+$/,"").replace(/^http/,"ws");
-  return `${base}/room/${R.code}?role=${R.role}&id=${R.sid}`;
+  return `${base}/room/${R.code}?role=${R.role}&id=${R.sid}`+(R.nieuw?`&nieuw=1&geldig=${R.geldig}`:"");
 }
 function connectWS(){
   clearTimeout(R.retryTimer);clearTimeout(R.openTimer);
@@ -647,52 +661,94 @@ function connectWS(){
   ws.onmessage=ev=>{
     let d;try{d=JSON.parse(ev.data)}catch(e){return}
     if(d.t!=="_sys")return onData(d);
-    if(d.ev==="joined"){clearTimeout(R.openTimer);R.joined=true;R.tries=0;
+    if(d.ev==="joined"){clearTimeout(R.openTimer);R.joined=true;R.tries=0;R.nieuw=false;
+      if(d.expires){R.expires=d.expires;store.lastRoom={code:R.code,role:R.role,expires:d.expires};save();codePill()}
+      if((R.role==="deelnemer"||R.rejoin)&&!R.paired){showChat(true);if(!d.peers)state("Wachten tot de ander er is…","")}
+      $("rLost").hidden=true;
       if(R.role==="maker"&&!R.codeShown){R.codeShown=true;$("rCode").textContent=R.code;$("rCodeBox").hidden=false;rStatus("");rLog("code gemaakt")}
       if(d.peers>0)paired();else if(R.everPaired){state("Wachten tot de ander terugkomt…","");}
     }
     else if(d.ev==="peer-joined")paired();
     else if(d.ev==="peer-left"){R.paired=false;R.otherLeft=true;if(R.connectedAt){rLog("verbroken","ander weg of netwerk",Math.round(performance.now()-R.connectedAt));R.connectedAt=0}
-      state("De ander is even weg – wachten…","bad");renderR()}
+      state("De ander is weg – wachten…","bad");
+      lost(`De verbinding met ${R.other?R.other.name:"de ander"} is verbroken. Zodra ${R.other?R.other.name:"de ander"} terugkomt met code ${R.code}, gaat het gesprek hier verder.`,"Blijf wachten");
+      renderR()}
     else if(d.ev==="error"){R.fatal=d.reden;
-      if(d.reden==="in-gebruik"&&R.role==="maker"&&!R.everPaired){R.code=newCode();R.fatal=null;return setTimeout(connectWS,100)}
+      if(d.reden==="in-gebruik"&&R.nieuw){R.code=newCode();R.fatal=null;return setTimeout(connectWS,100)}
       failWS(d.reden)}
   };
   ws.onclose=ev=>{
     clearTimeout(R.openTimer);
     if(R.ws!==ws||R.leaving||R.fatal)return;
     if(ev&&ev.code===4000&&ev.reason){   /* geweigerd door de ruimte (code onbekend, vol, ...) */
-      if(ev.reason==="in-gebruik"&&R.role==="maker"&&!R.everPaired){R.code=newCode();return setTimeout(connectWS,100)}
+      if(ev.reason==="in-gebruik"&&R.nieuw){R.code=newCode();return setTimeout(connectWS,100)}
       return failWS(ev.reason)}
     R.paired=false;
     if(!R.joined&&!R.everPaired&&R.tries>=2)return failWS("netwerk");
     R.tries=(R.tries||0)+1;
-    if(R.tries>12){state("Verbinding verbroken","bad");rStatus("De verbinding is weggevallen. Tik op 'Gesprek beëindigen' en maak een nieuwe verbinding.");rLog("verbroken","opnieuw verbinden mislukt");return}
+    if(R.tries>12){state("Verbinding verbroken","bad");rLog("verbroken","opnieuw verbinden mislukt");
+      lost(`Je verbinding is verbroken. Je kunt terug naar dit gesprek (code ${R.code}) of een nieuw gesprek starten.`,"Terug naar dit gesprek");return}
     state("Opnieuw verbinden…","");
     R.retryTimer=setTimeout(connectWS,Math.min(1000*2**(R.tries-1),8000));
   };
 }
 function failWS(reden){
   R.fatal=reden;clearTimeout(R.retryTimer);clearTimeout(R.openTimer);
+  if(reden==="niet-gevonden"&&R.rejoin){delete store.lastRoom;save();reden="verlopen"}
   rLog("mislukt",reden);rStatus(ERR[reden]||("Fout: "+reden));state("Niet verbonden","bad");rMic(false);
   try{R.ws&&R.ws.close()}catch(e){}
+  if(!$("rChat").hidden)lost((ERR[reden]||"Er is geen verbinding.")+(reden==="verlopen"?"":` Je kunt het opnieuw proberen met code ${R.code} of een nieuw gesprek starten.`),reden==="verlopen"?"":"Terug naar dit gesprek");
+  renderLast();
+}
+/* melding bij verbroken verbinding: terug naar hetzelfde gesprek of nieuw gesprek */
+function lost(text,backLabel){
+  $("rLostTxt").textContent=text;$("rLost").hidden=false;
+  $("rLostBack").hidden=!backLabel;$("rLostBack").textContent=backLabel||"";
+}
+function codePill(){
+  if(!R.code||!R.expires){$("rCodePill").hidden=true;return}
+  $("rCodePill").hidden=false;$("rCodePill").textContent=`Code ${R.code} · ${fmtExp(R.expires)}`;
+}
+function fmtExp(ts){
+  const d=new Date(ts),now=new Date(),t=d.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"});
+  const day=x=>x.toLocaleDateString("nl-NL");
+  if(t==="00:00"&&day(new Date(ts-60000))===day(now))return "geldig tot 24:00";
+  if(day(d)===day(now))return "geldig tot "+t;
+  return "geldig tot "+d.toLocaleDateString("nl-NL",{weekday:"short",day:"numeric",month:"short"})+" "+t;
+}
+function renderLast(){
+  const L=store.lastRoom;
+  if(L&&L.expires<Date.now()){delete store.lastRoom;save()}
+  if(!store.lastRoom){$("rLast").hidden=true;return}
+  $("rLast").hidden=false;$("rLastCode").textContent=L.code;
+  $("rLastExp").textContent=(L.role==="maker"?"Jij maakte deze code":"Jij deed mee met deze code")+" · "+fmtExp(L.expires);
 }
 function paired(){
-  const again=R.everPaired;
+  const again=R.everPaired;$("rLost").hidden=true;
   R.paired=true;R.everPaired=true;R.otherLeft=false;
   if(!R.connectedAt){R.connectedAt=performance.now();rLog(again?"opnieuw verbonden":"verbonden")}
   showChat(true);state("Verbonden","ok");rStatus("");
   send({t:"hello",name:rName(),lang:rLang()});
   /* microfoon gaat niet vanzelf aan: de gebruiker tikt zelf op de spreekknop */
 }
-function startSession(role,code){
+function startSession(role,code,opts={}){
   rReset();
-  Object.assign(R,{role,code,sid:Math.random().toString(36).slice(2,10),t0:performance.now(),tries:0,fatal:null,everPaired:false,codeShown:false});
+  /* vaste toestel-id: komt dit toestel terug (ook na herladen), dan vervangt het zijn oude verbinding */
+  if(!store.device){store.device=Math.random().toString(36).slice(2,8);save()}
+  Object.assign(R,{role,code,sid:store.device,t0:performance.now(),tries:0,fatal:null,everPaired:false,codeShown:false,
+    nieuw:!!opts.nieuw,geldig:opts.geldig||"dag",rejoin:!!opts.rejoin,expires:0});
   connectWS();
 }
 function rNew(){
   if(!rReady())return rCheck();
-  startSession("maker",newCode());rStatus("Gesprekscode maken…");
+  store.rValid=$("rValid").value;save();
+  startSession("maker",newCode(),{nieuw:true,geldig:$("rValid").value});rStatus("Gesprekscode maken…");
+}
+function rRejoin(){
+  const L=store.lastRoom;if(!L)return;
+  if(!rReady())return rCheck();
+  startSession(L.role,L.code,{rejoin:true});rLog("opnieuw deelnemen geprobeerd",L.code);rStatus("");
+  showChat(true);state("Verbinden…","");
 }
 function rJoin(){
   if(!rReady())return rCheck();
@@ -794,14 +850,22 @@ function rMic(on,discard){
   else{killRec(rec);R.myLive="";send({t:"live",text:""})}
   renderR();
 }
-function showChat(c){$("rSetup").hidden=c;$("rChat").hidden=!c;renderR()}
+function showChat(c){$("rSetup").hidden=c;$("rChat").hidden=!c;if(!c){$("rLost").hidden=true;renderLast()}else codePill();renderR()}
 function rReset(){
   rMic(false,true);clearTimeout(R.openTimer);clearTimeout(R.retryTimer);
   if(R.connectedAt){rLog("verbroken","zelf beëindigd",Math.round(performance.now()-R.connectedAt));R.connectedAt=0}
   else if(R.ws&&R.role&&!R.everPaired&&!R.fatal)rLog("gestopt zonder verbinding",R.role==="maker"?"niemand heeft deelgenomen":"verbinding niet tot stand gekomen");
   R.leaving=true;try{R.ws&&R.ws.close(1000,"klaar")}catch(e){}
   Object.assign(R,{ws:null,code:"",other:null,mine:[],theirs:[],live:"",role:"",t0:0,connectedAt:0,leaving:false,paired:false,everPaired:false,fatal:null});$("rCodeBox").hidden=true}
-$("rNew").onclick=rNew;$("rJoin").onclick=rJoin;
+$("rNew").onclick=rNew;$("rJoin").onclick=rJoin;$("rLastBtn").onclick=rRejoin;
+if(store.rValid)$("rValid").value=store.rValid;
+$("rLostBack").onclick=()=>{
+  $("rLost").hidden=true;
+  if(R.ws&&R.ws.readyState===1&&!R.fatal){state("Wachten tot de ander terugkomt…","");return}   // wij zijn nog verbonden: blijven wachten
+  const code=R.code,role=R.role;if(!code)return;
+  startSession(role,code,{rejoin:true});showChat(true);state("Opnieuw verbinden…","");
+};
+$("rLostNew").onclick=()=>{rReset();showChat(false);rStatus("");renderLast()};
 $("rJoinCode").onkeydown=e=>{if(e.key==="Enter")rJoin()};
 /* Portofoonknop: tikken = aan/uit (uit = versturen), of ingedrukt houden en loslaten = versturen */
 function holdButton(el,{canStart,isOn,start,stop}){
@@ -818,7 +882,7 @@ function holdButton(el,{canStart,isOn,start,stop}){
 holdButton($("rMic"),{
   canStart:()=>{if(!R.paired){rStatus("De microfoon gaat aan zodra jullie verbonden zijn.");return false}return true},
   isOn:()=>R.on,start:()=>rMic(true),stop:()=>rMic(false)});
-$("rLeave").onclick=()=>{rReset();showChat(false);rStatus("Gesprek beëindigd")};
+$("rLeave").onclick=()=>{rReset();showChat(false);rStatus("Gesprek beëindigd. Met dezelfde code kun je later opnieuw verbinden.");renderLast()};
 
 /* ---------- TOESPRAAK (één spreker, doorlopend) ---------- */
 const from=$("from"),to=$("to"),tStatus=statusOf("tStatus"),tSpeak=persist("tSpeak",false);
