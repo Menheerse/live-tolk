@@ -300,14 +300,44 @@ function killRec(r){if(!r)return;r.onend=r.onresult=r.onerror=null;try{r.abort()
 /* Ruis negeren: 1-2 woorden waar de herkenning zelf erg onzeker over is (bijv. tv of achtergrondgeluid).
    Sommige telefoons geven altijd 0 als zekerheid; dan wordt niets weggefilterd. */
 const isNoise=(t,c)=>typeof c==="number"&&c>0&&c<0.6&&t.split(/\s+/).length<=2;
+/* Chrome op Android stuurt bij doorlopend luisteren de zin telkens opnieuw als "definitief", steeds één
+   woord langer ("Hallo", "Hallo dit", "Hallo dit is" …), met zekerheid 0. Die tussenversies houden we vast
+   en voegen we samen; pas als de zin echt af is (zekerheid > 0, een nieuwe zin, of even stilte) gaat hij door.
+   Op de computer geeft Chrome meteen een echte zin (zekerheid > 0), dus daar is er geen vertraging. */
+const SETTLE_MS=1500;
+/* Android weigert de microfoon kort als de app net op de achtergrond was (bijv. na de camera).
+   Dat is geen echte weigering: dan geen melding tonen en later gewoon opnieuw proberen. */
+let visibleAt=Date.now();
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)visibleAt=Date.now()});
+const MIC_WARN="Geen toegang tot de microfoon. Sta de microfoon toe (slotje in de adresbalk) en probeer opnieuw.";
+const norm=x=>x.toLowerCase().replace(/[^\p{L}\p{N} ]/gu,"").replace(/\s+/g," ").trim();
 function makeRec(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
   if(!SR)return null;
   const r=new SR();r.lang=lang;r.continuous=continuous;r.interimResults=true;
+  let pend="",pc=0,tm=null,last="",lastAt=0;
+  const emit=(t,c)=>{
+    const n=norm(t);if(!n)return;
+    if(n===last&&Date.now()-lastAt<5000)return;            // zelfde zin vlak na elkaar: één keer
+    last=n;lastAt=Date.now();
+    if(!isNoise(t,c))onFinal(t,c);
+  };
+  const commit=()=>{clearTimeout(tm);tm=null;if(pend){const t=pend,c=pc;pend="";pc=0;emit(t,c)}};
+  const final=(t,c)=>{
+    const sameSentence=pend&&(norm(t).startsWith(norm(pend))||norm(pend).startsWith(norm(t)));
+    if(pend&&!sameSentence)commit();
+    if(!pend||norm(t).length>=norm(pend).length)pend=t;      // langste versie bewaren
+    pc=Math.max(pc,typeof c==="number"?c:0);
+    if(typeof c==="number"&&c>0)return commit();             // echte, afgeronde zin
+    clearTimeout(tm);tm=setTimeout(()=>{commit();onInterim("")},SETTLE_MS);
+  };
   r.onresult=e=>{let it="";for(let i=e.resultIndex;i<e.results.length;i++){const x=e.results[i];
-    if(x.isFinal){const t=x[0].transcript.trim(),c=x[0].confidence;if(t&&!isNoise(t,c))onFinal(t,c)}else it+=x[0].transcript}
-    onInterim(it.trim())};
-  r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){warn("Geen toegang tot de microfoon. Sta de microfoon toe (slotje in de adresbalk) en probeer opnieuw.");onDenied()}};
-  r.onend=onEnd;
+    if(x.isFinal){const t=x[0].transcript.trim();if(t)final(t,x[0].confidence)}else it+=x[0].transcript}
+    onInterim(it.trim()||pend)};
+  r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){
+    if(document.hidden||Date.now()-visibleAt<4000)return;   // net terug in de app: tijdelijk, geen melding
+    warn(MIC_WARN);onDenied()}};
+  r.onstart=()=>{if($("warn").textContent===MIC_WARN)$("warn").style.display="none"};
+  r.onend=()=>{commit();onEnd()};
   try{r.start()}catch(e){}
   return r;
 }
@@ -657,7 +687,11 @@ document.addEventListener("click",e=>{
   if(e.target.closest("#viewer"))$("viewer").hidden=true;
 });
 /* terug in de app (scherm weer aan): meteen opnieuw verbinden als het nodig is */
-document.addEventListener("visibilitychange",()=>{if(!document.hidden&&R.code&&!R.fatal&&!R.leaving&&(!R.ws||R.ws.readyState>1)){R.tries=0;connectWS()}});
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden)return;
+  if(R.code&&!R.fatal&&!R.leaving&&(!R.ws||R.ws.readyState>1)){R.tries=0;connectWS()}
+  if(R.on&&!R.speaking)setTimeout(()=>{if(R.on&&!R.speaking&&!document.hidden)startR()},700);   // microfoon weer aan na terugkomst
+});
 /* verbinding levend houden (sommige netwerken sluiten stille verbindingen) */
 setInterval(()=>{if(R.ws&&R.ws.readyState===1)try{R.ws.send("ping")}catch(e){}},25000);
 function onData(d){
@@ -704,7 +738,7 @@ function startR(){
   const rec=R.rec=makeRec(rLang(),true,{
     onFinal:(t,c)=>{const id=Date.now()+"-"+Math.random().toString(36).slice(2,6);R.mine.push({id,text:t,tr:"…"});send({t:"msg",id,text:t,lang:rLang(),conf:c})},
     onInterim:it=>{R.myLive=it;send({t:"live",text:it});renderR()},
-    onEnd:()=>{R.myLive="";renderR();setTimeout(()=>{if(R.on&&!R.speaking&&R.rec===rec)startR()},150)},
+    onEnd:()=>{R.myLive="";renderR();setTimeout(()=>{if(R.on&&!R.speaking&&R.rec===rec&&!document.hidden)startR()},document.hidden?0:Date.now()-visibleAt<4000?800:150)},
     onDenied:()=>rMic(false)
   });
   renderR();
