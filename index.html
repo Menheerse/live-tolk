@@ -496,7 +496,10 @@ for(const k in TABS)$(TABS[k]).onclick=()=>tab(k);
 let people=store.people||[{lang:"nl-NL"},{lang:"en-GB"}];
 let log=[],active=-1,cRec=null,liveText="";
 const cStatus=statusOf("cStatus");
-const cAuto=persist("auto",true),cSpeak=persist("cSpeak",true),cFace=persist("face",false,()=>renderConv());
+/* Iedereen zet zelf de microfoon aan: automatisch doorgeven van de beurt staat standaard uit
+   (eenmalig ook uitgezet op toestellen waar het eerder aan stond). */
+if(!store.autoOff1){store.chk.auto=false;store.autoOff1=true;save()}
+const cAuto=persist("auto",false),cSpeak=persist("cSpeak",true),cFace=persist("face",false,()=>renderConv());
 const label=i=>`Persoon ${i+1} · ${name(people[i].lang)}`;
 $("pause").value=String(store.pause||2);
 $("pause").onchange=()=>{store.pause=+$("pause").value;save()};
