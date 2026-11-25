@@ -200,6 +200,14 @@ input[type=text],input[type=password]{width:100%}
   .half .line{font-size:24px}
   .rhalves{gap:16px}
   .log{background:var(--soft);border:0}
+  .faceopt{display:none!important}
+  #conv>.people{display:inline-flex;vertical-align:middle;margin-right:12px}
+  #conv>.people+.opts{display:inline-flex;vertical-align:middle;margin-top:0}
+  #conv>.people+.opts .more{flex-basis:auto}
+  #conv>.people+.opts .more[open]{flex-basis:100%}
+  .facing.split{min-height:300px;grid-template-rows:none;grid-template-columns:repeat(var(--n,2),minmax(0,1fr));gap:16px}
+  .facing.split .half{border-width:2px}
+  .facing.split .line.mine{font:400 17px Inter,sans-serif;color:var(--mut)}
   .pane{max-height:none;height:var(--fit,62vh)}
 }
 @media (prefers-color-scheme:dark){@media (min-width:1100px){:root:not([data-theme=light]) .tabs button[aria-selected=true]{background:#fff;color:#0e2f45}}}
@@ -304,7 +312,7 @@ input[type=text],input[type=password]{width:100%}
       <label><input type="checkbox" id="cSpeak" checked> Vertaling voorlezen</label>
       <details class="more" id="convMore"><summary>Meer instellingen</summary>
         <div class="opts">
-          <label><input type="checkbox" id="face"> Tegenover elkaar (scherm in tweeën)</label>
+          <label class="faceopt"><input type="checkbox" id="face"> Tegenover elkaar (scherm in tweeën)</label>
           <label>Einde beurt na <select id="pause" style="min-height:40px"><option value="1">1 s</option><option value="1.5">1,5 s</option><option value="2">2 s</option><option value="3">3 s</option><option value="4">4 s</option><option value="5">5 s</option></select> stilte</label>
           <label><input type="checkbox" id="auto"> Beurt automatisch naar de ander</label>
         </div>
@@ -685,14 +693,21 @@ $("people").addEventListener("click",e=>{if(e.target.dataset.x!==undefined){stop
 $("addP").onclick=()=>{const used=people.map(p=>p.lang);people.push({lang:LANGS.find(l=>!used.includes(l[0]))[0]});renderPeople()};
 
 const micBtn=i=>`<button class="spk${active===i?" on":""}" data-s="${i}" style="--c:${COLORS[i]}"><span class="dot"></span>${active===i?"Luistert… tik of los = klaar":"Spreek "+esc(name(people[i].lang))}</button>`;
+/* computer: altijd een vlak per persoon naast elkaar (geen 'tegenover elkaar') */
+const DESKTOP=window.matchMedia("(min-width:1100px)");
+DESKTOP.addEventListener("change",()=>renderConv());
 function renderConv(){
-  const facing=cFace()&&people.length===2;
+  const split=DESKTOP.matches;
+  const facing=split||cFace()&&people.length===2;
   $("normal").hidden=facing;$("facing").hidden=!facing;
+  $("facing").classList.toggle("split",split);
+  $("facing").style.setProperty("--n",people.length);
   if(facing){
-    $("facing").innerHTML=[1,0].map(i=>{
+    const order=split?people.map((p,i)=>i):[1,0];
+    $("facing").innerHTML=order.map(i=>{
       const L=people[i].lang;
-      const lines=log.map(e=>lineHTML(textFor(e,L),"",e.p===i?"mine":"")).join("")+(liveText?lineHTML(liveText,"","live"+(active===i?" mine":"")):"");
-      return `<div class="half${i===1?" flip":""}" style="--c:${COLORS[i]}"><div class="ph">${esc(label(i))}</div><div class="lines">${lines||emptyHTML("Tik op je knop en praat.")}</div>${micBtn(i)}</div>`;
+      const lines=log.map(e=>lineHTML(textFor(e,L),split&&e.p!==i?e.text:"",e.p===i?"mine":"")).join("")+(liveText?lineHTML(liveText,"","live"+(active===i?" mine":"")):"");
+      return `<div class="half${!split&&i===1?" flip":""}" style="--c:${COLORS[i]}"><div class="ph">${esc(label(i))}</div><div class="lines">${lines||emptyHTML(split?"Wat de ander zegt, verschijnt hier in het "+esc(name(L))+".":"Tik op je knop en praat.")}</div>${micBtn(i)}</div>`;
     }).join("");
     scrollEnd(...document.querySelectorAll("#facing .lines"));
   }else{
@@ -1135,7 +1150,7 @@ let fitRaf=0;const fitSoon=()=>{cancelAnimationFrame(fitRaf);fitRaf=requestAnima
 window.addEventListener("resize",fitSoon);window.addEventListener("orientationchange",()=>setTimeout(fitAll,300));
 if(window.visualViewport)visualViewport.addEventListener("resize",fitSoon);
 new MutationObserver(fitSoon).observe(document.querySelector(".wrap"),{attributes:true,subtree:true,attributeFilter:["hidden"]});
-$("convMore").open=window.innerWidth>900;
+/* 'Meer instellingen' standaard dicht, zodat het gesprek zo veel mogelijk ruimte heeft */
 
 /* ---------- help ---------- */
 function openHelp(){
