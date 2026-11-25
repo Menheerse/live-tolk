@@ -125,6 +125,15 @@ input[type=text],input[type=password]{width:100%}
 .half .line{font:500 clamp(18px,2.4vw,26px)/1.3 "Space Grotesk",sans-serif;margin:0}
 .half .line.mine{font:400 15px Inter,sans-serif;color:var(--mut)}
 .half .ph{margin:0}
+.microw{display:flex;gap:10px}.microw .spk{flex:1}
+.photo{flex:none;width:92px;min-height:64px;border-radius:14px;background:#0e2f45;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-weight:600;font-size:14px;cursor:pointer}
+.photo svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:2;stroke-linejoin:round}
+.photo.off{opacity:.4;pointer-events:none}
+.photo:focus-within{outline:3px solid #3bbf7a;outline-offset:2px}
+.shot{display:block;max-width:min(100%,320px);max-height:240px;border-radius:12px;cursor:zoom-in;box-shadow:0 2px 8px #0003;margin:2px 0}
+.shotnote{display:block;font:400 13px Inter,sans-serif;color:var(--mut);margin-top:2px}
+.viewer{position:fixed;inset:0;z-index:60;background:#000e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:12px;color:#fff;font-size:14px}
+.viewer img{max-width:100%;max-height:calc(100% - 40px);object-fit:contain;border-radius:8px}
 /* tegenover elkaar: bovenste helft gedraaid voor wie aan de overkant zit */
 .half.flip{transform:rotate(180deg)}
 @media(max-width:700px){.panes{grid-template-columns:1fr}.pane{min-height:200px;max-height:none}.out{order:-1}.status{margin-left:0;width:100%}.log{max-height:none;min-height:260px}}
@@ -144,6 +153,7 @@ input[type=text],input[type=password]{width:100%}
     <div class="row"><button id="consentNo">Niet akkoord</button><button class="mic" id="consentYes">Akkoord</button></div>
   </div>
 </div>
+<div class="viewer" id="viewer" hidden><img id="viewerImg" alt="Foto groot"><span>Tik om te sluiten</span></div>
 <div class="wrap">
   <div class="head">
     <div class="brand"><img src="logo.png" alt="B-IM Menheerse – Bouw- en Informatiemanagement" class="logo" width="383" height="160"><h1>Live Tolk</h1><img src="denijs.png" alt="De Nijs bouw en ontwikkeling" class="logo partner" width="323" height="200"></div>
@@ -210,7 +220,9 @@ input[type=text],input[type=password]{width:100%}
       </div>
       <div class="rhalves">
         <div class="half" style="--c:#a9d4ff"><div class="ph"><span id="rOtherLbl">Gesprekspartner</span></div><div class="lines" id="rTheirs"></div></div>
-        <div class="half" style="--c:#b8f5d0"><div class="ph"><span id="rMeLbl">Ik</span></div><div class="lines" id="rMine"></div><button class="spk" id="rMic" style="--c:#b8f5d0"><span class="dot"></span><span>Microfoon aan</span></button></div>
+        <div class="half" style="--c:#b8f5d0"><div class="ph"><span id="rMeLbl">Ik</span></div><div class="lines" id="rMine"></div>
+          <div class="microw"><button class="spk" id="rMic" style="--c:#b8f5d0"><span class="dot"></span><span>Microfoon aan</span></button>
+          <label class="photo" id="rPhotoBtn" title="Foto sturen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg><span>Foto</span><input type="file" id="rPhoto" accept="image/*" hidden></label></div></div>
       </div>
     </div>
     <p class="status" id="rStatus" style="margin-top:10px"></p>
@@ -618,12 +630,44 @@ function rJoin(){
   startSession("deelnemer",c);rLog("deelnemen geprobeerd");rStatus("Verbinden…");
 }
 const send=o=>{if(R.ws&&R.ws.readyState===1&&R.paired)R.ws.send(JSON.stringify(o))};
+/* Foto's: verkleinen (max 1280 px, JPEG) en via de gespreksruimte sturen. Alleen tijdens het gesprek zichtbaar. */
+async function shrink(file){
+  let bmp;try{bmp=await createImageBitmap(file,{imageOrientation:"from-image"})}catch(e){bmp=await createImageBitmap(file)}
+  for(const [max,q] of [[1280,.72],[1024,.65],[800,.6]]){
+    const k=Math.min(1,max/Math.max(bmp.width,bmp.height)),c=document.createElement("canvas");
+    c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);
+    c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
+    const url=c.toDataURL("image/jpeg",q);if(url.length<700000)return url;
+  }
+  throw new Error("te groot");
+}
+$("rPhoto").addEventListener("change",async e=>{
+  const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;
+  if(!R.paired)return rStatus("Foto's kun je sturen zodra jullie verbonden zijn.");
+  rStatus("Foto verkleinen…");
+  try{
+    const data=await shrink(f),id="f"+Date.now().toString(36);
+    R.mine.push({id,img:data,ok:false});renderR();
+    send({t:"img",id,data});rStatus("");
+    rLog("foto verstuurd",Math.round(data.length*3/4/1024)+" KB",0);
+  }catch(x){rStatus("Deze foto kon niet worden verstuurd.")}
+});
+document.addEventListener("click",e=>{
+  const im=e.target.closest(".shot");if(im){$("viewerImg").src=im.src;$("viewer").hidden=false;return}
+  if(e.target.closest("#viewer"))$("viewer").hidden=true;
+});
 /* terug in de app (scherm weer aan): meteen opnieuw verbinden als het nodig is */
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&R.code&&!R.fatal&&!R.leaving&&(!R.ws||R.ws.readyState>1)){R.tries=0;connectWS()}});
 /* verbinding levend houden (sommige netwerken sluiten stille verbindingen) */
 setInterval(()=>{if(R.ws&&R.ws.readyState===1)try{R.ws.send("ping")}catch(e){}},25000);
 function onData(d){
   if(!d||typeof d!=="object")return;
+  if(d.t==="img"){
+    /* alleen echte afbeeldingen accepteren; foto's worden nergens bewaard */
+    if(typeof d.data==="string"&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(d.data)&&d.data.length<1000000){
+      R.theirs.push({id:String(d.id||""),img:d.data});send({t:"img-ok",id:d.id});renderR()}
+    return}
+  if(d.t==="img-ok"){const m=R.mine.find(x=>x.id===d.id);if(m){m.ok=true;renderR()}return}
   if(d.t==="hello")R.other={name:String(d.name||"Ander").slice(0,30),lang:String(d.lang||"en-GB")};
   else if(d.t==="live")R.live=String(d.text||"").slice(0,500);
   else if(d.t==="tr"){const m=R.mine.find(x=>x.id===d.id);if(m)m.tr=String(d.text||"")}
@@ -644,11 +688,13 @@ function renderR(){
   const o=R.other;
   $("rOtherLbl").textContent=o?`${o.name} · spreekt ${name(o.lang)} · jij leest ${name(rLang())}`:"Wachten op gesprekspartner…";
   $("rMeLbl").textContent=`${rName()} · ${name(rLang())}`;
-  $("rTheirs").innerHTML=R.theirs.map(e=>lineHTML(e.tr,e.text)).join("")+(R.live?lineHTML("",R.live+" …","live"):"")
+  const shot=(src,note)=>`<div class="line"><img class="shot" src="${src}" alt="Foto">${note?`<span class="shotnote">${esc(note)}</span>`:""}</div>`;
+  $("rTheirs").innerHTML=R.theirs.map(e=>e.img?shot(e.img,"Foto van "+(o?o.name:"de ander")):lineHTML(e.tr,e.text)).join("")+(R.live?lineHTML("",R.live+" …","live"):"")
     ||emptyHTML(`Hier verschijnt wat de ander zegt, vertaald in het ${esc(name(rLang()))}.`);
-  $("rMine").innerHTML=R.mine.map(e=>lineHTML(e.text,o?"De ander leest: "+e.tr:"","mine")).join("")+(R.myLive?lineHTML(R.myLive,"","mine live"):"")
+  $("rMine").innerHTML=R.mine.map(e=>e.img?shot(e.img,e.ok?"Foto aangekomen ✓":"Foto versturen…"):lineHTML(e.text,o?"De ander leest: "+e.tr:"","mine")).join("")+(R.myLive?lineHTML(R.myLive,"","mine live"):"")
     ||emptyHTML("Praat gewoon. Wat je zegt gaat direct naar de ander.");
   scrollEnd($("rTheirs"),$("rMine"));
+  $("rPhotoBtn").classList.toggle("off",!R.paired);
   $("rMic").classList.toggle("on",R.on);
   $("rMic").lastElementChild.textContent=!R.on?"Microfoon aan":R.speaking?"Even stil: vertaling wordt voorgelezen":"Luistert… (tik = microfoon uit)";
 }

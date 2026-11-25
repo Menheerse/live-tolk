@@ -238,7 +238,7 @@ export class Room {
     return new Response(null, { status: 101, webSocket: client });
   }
   webSocketMessage(ws, msg) {
-    if (typeof msg !== "string" || msg.length > 20000 || msg === "ping") return;
+    if (typeof msg !== "string" || msg.length > 1000000 || msg === "ping") return;   // ruim genoeg voor een verkleinde foto
     for (const other of this.state.getWebSockets()) if (other !== ws) { try { other.send(msg); } catch {} }
   }
   webSocketClose(ws, code, reason) {
