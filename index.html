@@ -128,7 +128,9 @@ input[type=text],input[type=password]{width:100%}
 .microw{display:flex;gap:10px}.microw .spk{flex:1}
 .photo{flex:none;width:92px;min-height:64px;border-radius:14px;background:#0e2f45;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-weight:600;font-size:14px;cursor:pointer}
 .photo svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:2;stroke-linejoin:round}
+.photo.small{width:70px;background:var(--soft);color:var(--ink);border:2px solid var(--line);font-size:12px}
 .photo.off{opacity:.4;pointer-events:none}
+@media(max-width:420px){.photo{width:76px}.photo.small{width:60px}}
 .photo:focus-within{outline:3px solid #3bbf7a;outline-offset:2px}
 .shot{display:block;max-width:min(100%,320px);max-height:240px;border-radius:12px;cursor:zoom-in;box-shadow:0 2px 8px #0003;margin:2px 0}
 .shotnote{display:block;font:400 13px Inter,sans-serif;color:var(--mut);margin-top:2px}
@@ -222,7 +224,8 @@ input[type=text],input[type=password]{width:100%}
         <div class="half" style="--c:#a9d4ff"><div class="ph"><span id="rOtherLbl">Gesprekspartner</span></div><div class="lines" id="rTheirs"></div></div>
         <div class="half" style="--c:#b8f5d0"><div class="ph"><span id="rMeLbl">Ik</span></div><div class="lines" id="rMine"></div>
           <div class="microw"><button class="spk" id="rMic" style="--c:#b8f5d0"><span class="dot"></span><span>Microfoon aan</span></button>
-          <label class="photo" id="rPhotoBtn" title="Foto sturen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg><span>Foto</span><input type="file" id="rPhoto" accept="image/*" hidden></label></div></div>
+          <label class="photo" id="rPhotoBtn" title="Foto maken met de camera"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg><span>Camera</span><input type="file" id="rPhoto" accept="image/*" capture="environment" hidden></label>
+          <label class="photo small" id="rGalleryBtn" title="Foto kiezen uit de galerij"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/></svg><span>Galerij</span><input type="file" id="rGallery" accept="image/*" hidden></label></div></div>
       </div>
     </div>
     <p class="status" id="rStatus" style="margin-top:10px"></p>
@@ -671,7 +674,7 @@ async function shrink(file){
   }
   throw new Error("te groot");
 }
-$("rPhoto").addEventListener("change",async e=>{
+async function onPhoto(e){
   const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;
   if(!R.paired)return rStatus("Foto's kun je sturen zodra jullie verbonden zijn.");
   rStatus("Foto verkleinen…");
@@ -681,7 +684,9 @@ $("rPhoto").addEventListener("change",async e=>{
     send({t:"img",id,data});rStatus("");
     rLog("foto verstuurd",Math.round(data.length*3/4/1024)+" KB",0);
   }catch(x){rStatus("Deze foto kon niet worden verstuurd.")}
-});
+}
+$("rPhoto").addEventListener("change",onPhoto);
+$("rGallery").addEventListener("change",onPhoto);
 document.addEventListener("click",e=>{
   const im=e.target.closest(".shot");if(im){$("viewerImg").src=im.src;$("viewer").hidden=false;return}
   if(e.target.closest("#viewer"))$("viewer").hidden=true;
@@ -728,7 +733,7 @@ function renderR(){
   $("rMine").innerHTML=R.mine.map(e=>e.img?shot(e.img,e.ok?"Foto aangekomen ✓":"Foto versturen…"):lineHTML(e.text,o?"De ander leest: "+e.tr:"","mine")).join("")+(R.myLive?lineHTML(R.myLive,"","mine live"):"")
     ||emptyHTML("Praat gewoon. Wat je zegt gaat direct naar de ander.");
   scrollEnd($("rTheirs"),$("rMine"));
-  $("rPhotoBtn").classList.toggle("off",!R.paired);
+  $("rPhotoBtn").classList.toggle("off",!R.paired);$("rGalleryBtn").classList.toggle("off",!R.paired);
   $("rMic").classList.toggle("on",R.on);
   $("rMic").lastElementChild.textContent=!R.on?"Microfoon aan":R.speaking?"Even stil: vertaling wordt voorgelezen":"Luistert… (tik = microfoon uit)";
 }
