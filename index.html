@@ -78,6 +78,15 @@ input[type=text],input[type=password]{width:100%}
 .keep{margin-top:22px;border-top:1px solid var(--line);padding-top:10px;font-size:15px}
 .modal{position:fixed;inset:0;background:#000a;display:flex;z-index:50;padding:16px;overflow-y:auto}
 .modal .mbox{margin:auto}
+.tabs{grid-template-columns:repeat(3,minmax(0,1fr)) auto!important;width:min(100%,600px)!important}
+.helpbtn{width:auto;padding:8px 14px!important;color:#e46f2a!important;border-color:#e46f2a!important}
+.helpbox{max-width:640px;gap:6px}
+.helphead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+.helpbox details{border-top:1px solid var(--line);padding:4px 0}
+.helpbox summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font:600 17px "Space Grotesk",sans-serif}
+.helpbox details[open] summary{color:#e46f2a}
+.mbox.helpbox ul,.mbox.helpbox ol{margin:4px 0 12px;padding-left:22px;color:var(--ink);font-size:15px;display:grid;gap:6px}
+.helpfoot{color:var(--mut);font-size:13px;text-align:center;margin:8px 0 0}
 .mbox{background:var(--bg);color:var(--ink);border-radius:18px;padding:clamp(20px,4vw,30px);max-width:500px;width:100%;display:grid;gap:12px;box-shadow:0 20px 60px #0006}
 .mbox h2{font:700 24px/1.15 "Space Grotesk",sans-serif;margin:0}
 .mbox p,.mbox ul{margin:0;font-size:15px}.mbox ul{padding-left:20px;color:var(--mut)}
@@ -161,6 +170,65 @@ input[type=text],input[type=password]{width:100%}
     <div class="row"><button id="consentNo">Niet akkoord</button><button class="mic" id="consentYes">Akkoord</button></div>
   </div>
 </div>
+<div class="modal" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="mbox helpbox">
+    <div class="helphead"><h2 id="helpTitle">Uitleg Live Tolk</h2><button id="helpClose" aria-label="Uitleg sluiten">Sluiten</button></div>
+    <details data-h="start"><summary>Aan de slag</summary>
+      <ul>
+        <li>Gebruik <b>Google Chrome</b> (Android of computer). Samsung Internet en Firefox kunnen geen spraak herkennen.</li>
+        <li>Sta de <b>microfoon</b> toe als Chrome erom vraagt.</li>
+        <li>Zet de app op je beginscherm: in Chrome ⋮ → <i>Toevoegen aan startscherm</i>.</li>
+        <li>Kies bovenin de stand: <b>Gesprek</b> (samen bij één telefoon), <b>Op afstand</b> (ieder een eigen telefoon) of <b>Toespraak</b> (één spreker, bijv. een toolboxmeeting).</li>
+      </ul></details>
+    <details data-h="knop"><summary>De spreekknop (portofoon)</summary>
+      <ul>
+        <li><b>Tik</b> om te praten en <b>tik nog een keer</b> om te versturen.</li>
+        <li>Of <b>houd de knop vast</b> tijdens het praten en <b>laat los</b> om te versturen.</li>
+        <li>De microfoon gaat nooit vanzelf aan; iedereen zet hem zelf aan.</li>
+        <li>Spreek rustig in korte zinnen. Bouwtermen (bekisting, stekken, rikker …) worden met een vaste woordenlijst vertaald.</li>
+      </ul></details>
+    <details data-h="conv"><summary>Gesprek – samen bij één telefoon</summary>
+      <ol>
+        <li>Kies bij <i>Persoon 1</i> en <i>Persoon 2</i> ieders taal (met <i>+ Persoon</i> tot 4 personen).</li>
+        <li>Tik op je eigen gekleurde knop <i>Spreek …</i> en praat; tik nogmaals als je klaar bent.</li>
+        <li>De vertaling verschijnt in het gesprek en wordt voorgelezen (vinkje <i>Vertaling voorlezen</i>).</li>
+        <li><i>Tegenover elkaar</i>: het scherm in tweeën, de bovenste helft gedraaid voor wie aan de overkant zit.</li>
+        <li><i>Einde beurt na … stilte</i>: hoe lang je mag pauzeren voordat je beurt klaar is.</li>
+      </ol></details>
+    <details data-h="remote"><summary>Op afstand – ieder een eigen telefoon</summary>
+      <ol>
+        <li>Vul je <b>naam</b> en <b>taal</b> in (stap 1 licht op tot dat gedaan is).</li>
+        <li>De één tikt op <b>Maak gesprekscode</b> en stuurt de code van 6 tekens door (WhatsApp, telefoon).</li>
+        <li>De ander vult de code in bij <b>Deelnemen</b>.</li>
+        <li>Bovenin zie je wat de ander zegt, in jouw taal; onderin wat jij zegt en hoe de ander het leest.</li>
+        <li>Met <b>Camera</b> of <b>Galerij</b> stuur je een foto; tik op een foto om hem groot te zien. Foto's worden niet bewaard.</li>
+        <li>De code blijft geldig tot vanavond 24:00 (of 24 uur / 1 week). Met <b>Opnieuw verbinden</b> bij <i>Laatste gesprek</i> ga je terug.</li>
+        <li>Valt de verbinding weg, dan verbindt de app vanzelf opnieuw. Lukt dat niet, kies <i>Terug naar dit gesprek</i> of <i>Nieuw gesprek</i>.</li>
+      </ol></details>
+    <details data-h="talk"><summary>Toespraak – één spreker</summary>
+      <ol>
+        <li>Kies <i>Ik spreek</i> en <i>Vertaal naar</i> (⇄ wisselt om).</li>
+        <li>Tik op <b>Start</b>; de app luistert doorlopend en vertaalt zin voor zin.</li>
+        <li><i>Grote letters</i> is handig op een tv of beamer.</li>
+        <li>Tik op <b>Stop</b> als je klaar bent; de laatste zin wordt nog vertaald.</li>
+      </ol></details>
+    <details data-h="tips"><summary>Problemen oplossen</summary>
+      <ul>
+        <li><b>"Geen toegang tot de microfoon"</b>: tik op het icoontje links in de adresbalk → <i>Machtigingen</i> → <i>Microfoon</i> → <i>Toestaan</i>.</li>
+        <li><b>Geen voorlezen</b> of verkeerde stem: installeer de taal op je telefoon via <i>Instellingen → Tekst-naar-spraak → Google → Spraakgegevens installeren</i>.</li>
+        <li><b>Verkeerde woorden herkend</b>: praat dichter bij de telefoon en zo min mogelijk achtergrondgeluid.</li>
+        <li><b>Code niet gevonden</b>: controleer de code of laat de ander een nieuwe maken; codes verlopen na de gekozen tijd.</li>
+        <li><b>Oude versie</b>: ververs de pagina (omlaag vegen of ⟳).</li>
+      </ul></details>
+    <details data-h="privacy"><summary>Privacy en bewaren</summary>
+      <ul>
+        <li>Bij <i>Akkoord</i> worden de gesproken tekst en de vertaling bewaard om de app te verbeteren. Geen geluidsopnames, geen foto's, geen locatie.</li>
+        <li>Vertel je gesprekspartner dat het gesprek wordt bewaard.</li>
+        <li>Onderaan bij <i>Bewaarde teksten</i> kun je bewaren uitzetten en alles op dit toestel wissen.</li>
+      </ul></details>
+    <p class="helpfoot">Live Tolk · B-IM Menheerse</p>
+  </div>
+</div>
 <div class="viewer" id="viewer" hidden><img id="viewerImg" alt="Foto groot"><span>Tik om te sluiten</span></div>
 <div class="wrap">
   <div class="head">
@@ -169,6 +237,7 @@ input[type=text],input[type=password]{width:100%}
       <button role="tab" id="tabConv" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3v-3H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M17 9h3a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-4-3h-3"/></svg>Gesprek</button>
       <button role="tab" id="tabRemote" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="7" height="13" rx="1.5"/><rect x="15" y="7" width="7" height="13" rx="1.5"/><path d="M10.5 9.5c1.2-1 2.8-1 4 0M11.5 12c.6-.4 1.4-.4 2 0"/></svg>Op afstand</button>
       <button role="tab" id="tabTalk" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg>Toespraak</button>
+      <button class="helpbtn" id="helpBtn" aria-haspopup="dialog" title="Uitleg"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.2-2.5 3.8"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/></svg>Help</button>
     </div>
   </div>
   <div class="warn" id="warn"></div>
@@ -988,6 +1057,17 @@ function consent(yes){
 $("consentYes").onclick=()=>consent(true);
 $("consentNo").onclick=()=>consent(false);
 $("consentYes").focus();
+
+/* ---------- help ---------- */
+function openHelp(){
+  const want={conv:"conv",remote:"remote",talk:"talk"}[store.tab]||"start";
+  document.querySelectorAll("#help details").forEach(d=>d.open=d.dataset.h===want||d.dataset.h==="knop"&&!store.helpSeen);
+  $("help").hidden=false;$("helpClose").focus();store.helpSeen=true;save();
+}
+const closeHelp=()=>{$("help").hidden=true;$("helpBtn").focus()};
+$("helpBtn").onclick=openHelp;$("helpClose").onclick=closeHelp;
+$("help").addEventListener("click",e=>{if(e.target.id==="help")closeHelp()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("help").hidden)closeHelp()});
 
 /* ---------- start ---------- */
 renderPeople();renderTalk();
