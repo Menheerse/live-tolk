@@ -567,7 +567,9 @@ function makeRec(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
     if(typeof c==="number"&&c>0)return commit();             // echte, afgeronde zin
     clearTimeout(tm);tm=setTimeout(()=>{commit();onInterim("")},SETTLE_MS);
   };
+  r.onaudiostart=()=>{started=true};
   r.onresult=e=>{
+    started=true;
     if(IOS){
       iosFull=Array.from(e.results).map(x=>x[0].transcript).join(" ").replace(/\s+/g," ").trim();
       const w=iosWords();if(w.length<iosSent)iosSent=0;            // Safari is opnieuw begonnen
