@@ -11,6 +11,8 @@
     "REPO": "Menheerse/live-tolk-data",
     "ALLOWED_ORIGIN": "https://menheerse.github.io"
   },
+  // Workers AI (Whisper) voor spraak naar tekst op iPhone e.d.
+  "ai": { "binding": "AI" },
   "durable_objects": {
     "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
   },

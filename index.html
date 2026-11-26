@@ -253,7 +253,7 @@ input[type=text],input[type=password]{width:100%}
     <details data-h="start"><summary>Aan de slag</summary>
       <ul>
         <li>Android en computer: gebruik <b>Google Chrome</b>. Samsung Internet en Firefox kunnen geen spraak herkennen.</li>
-        <li>iPhone en iPad: gebruik <b>Safari</b>. Zet <b>Siri</b> of <b>Dicteren</b> aan en sta bij <i>Instellingen → Privacy en beveiliging → Spraakherkenning</i> Safari toe.</li>
+        <li>iPhone en iPad: werkt in Safari en Chrome. Sta de <b>microfoon</b> toe; de spraak wordt via het tussenstation omgezet in tekst (iets later dan op Android).</li>
         <li>Sta de <b>microfoon</b> toe als Chrome erom vraagt.</li>
         <li>Zet de app op je beginscherm: in Chrome ⋮ → <i>Toevoegen aan startscherm</i>.</li>
         <li>Kies bovenin de stand: <b>Gesprek</b> (samen bij één telefoon), <b>Op afstand</b> (ieder een eigen telefoon) of <b>Toespraak</b> (één spreker, bijv. een toolboxmeeting).</li>
@@ -509,7 +509,11 @@ const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigat
 const IOS_OTHER=IOS&&/CriOS|FxiOS|EdgiOS|OPiOS|GSA\/|FBAN|FBAV|Instagram|WhatsApp|Line\//i.test(UA);
 const BAD_BROWSER=IOS_OTHER?"Op een iPhone werkt spraakherkenning alleen in Safari.":/SamsungBrowser/i.test(UA)?"Je gebruikt nu Samsung Internet.":/Firefox/i.test(UA)?"Je gebruikt nu Firefox.":(!SR?"":null);
 const ANDROID=/Android/i.test(UA);
-if(BAD_BROWSER!==null){
+/* Op iPhone/iPad (Safari stopt na de eerste zin) en in browsers zonder spraakherkenning neemt de app
+   zelf op en zet het tussenstation de opname om in tekst (Whisper). */
+const HAS_MIC=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
+const USE_WHISPER=HAS_MIC&&(IOS||BAD_BROWSER!==null);
+if(BAD_BROWSER!==null&&!USE_WHISPER){
   $("browserWarn").hidden=false;$("browserName").textContent=BAD_BROWSER;
   const here=location.host+location.pathname+location.search;
   if(IOS){
@@ -554,10 +558,74 @@ let visibleAt=Date.now();
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)visibleAt=Date.now()});
 const MIC_RESTART="De microfoon is gestopt. Tik opnieuw op de spreekknop om verder te praten.";
 const MIC_WARN=IOS
-  ?"Spraak werkt nog niet. Op de iPhone: 1) Instellingen → Siri → Siri aan (of Algemeen → Toetsenbord → Dicteren aan); 2) Instellingen → Privacy en beveiliging → Spraakherkenning → Safari aan; 3) in Safari: aA → Website-instellingen → Microfoon → Sta toe. Laad daarna de pagina opnieuw."
+  ?"Geen toegang tot de microfoon. Op de iPhone: tik in Safari op aA → Website-instellingen → Microfoon → Sta toe (of Instellingen → Apps → Safari → Microfoon). Laad daarna de pagina opnieuw."
   :"Geen toegang tot de microfoon. Sta de microfoon toe (slotje in de adresbalk) en probeer opnieuw.";
 const norm=x=>x.toLowerCase().replace(/[^\p{L}\p{N} ]/gu,"").replace(/\s+/g," ").trim();
+/* ---- Opnemen + Whisper (zelfde werking als makeRec) ----
+   Neemt op met de microfoon, herkent stiltes (zin klaar na ~0,9 s stilte) en stuurt elk stuk als
+   WAV (16 kHz mono) naar het tussenstation. Tikken = stoppen = laatste stuk versturen. */
+let MIC_STREAM=null;
+function wavBlob(pcm){
+  const b=new ArrayBuffer(44+pcm.length*2),v=new DataView(b),w=(o,t)=>{for(let i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i))};
+  w(0,"RIFF");v.setUint32(4,36+pcm.length*2,true);w(8,"WAVE");w(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,16000,true);v.setUint32(28,32000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,"data");v.setUint32(40,pcm.length*2,true);
+  for(let i=0;i<pcm.length;i++){const x=Math.max(-1,Math.min(1,pcm[i]));v.setInt16(44+i*2,x<0?x*0x8000:x*0x7fff,true)}
+  return new Blob([b],{type:"audio/wav"});
+}
+async function transcribe(pcm,lang){
+  const base=($("ghUrl").value.trim()||WORKER_URL).replace(/\/+$/,"");
+  const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),20000);
+  try{const r=await fetch(`${base}/stt?lang=${code(lang)}`,{method:"POST",headers:{"Content-Type":"audio/wav"},body:wavBlob(pcm),signal:ctl.signal});
+    if(!r.ok)throw new Error("stt "+r.status);return (await r.json()).text||""}finally{clearTimeout(tm)}
+}
+function makeRecWhisper(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
+  const r={};let ended=false,finishing=false,aborted=false,ctx=null,node=null,src=null,stream=null;
+  let chunks=[],pre=[],speaking=false,silentMs=0,segMs=0,noise=0.008,pending=0,lastShow=0,t0=Date.now();
+  const RATE=16000;
+  const cleanup=()=>{try{node&&(node.onaudioprocess=null);node&&node.disconnect();src&&src.disconnect()}catch(e){}
+    try{ctx&&ctx.close()}catch(e){}try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}MIC_STREAM=null};
+  const done=()=>{if(ended||pending>0||!finishing)return;ended=true;cleanup();if(!aborted)onEnd()};
+  const sendSeg=()=>{
+    if(!chunks.length)return;
+    const len=chunks.reduce((a,c)=>a+c.length,0),pcm=new Float32Array(len);let o=0;for(const c of chunks){pcm.set(c,o);o+=c.length}
+    chunks=[];segMs=0;speaking=false;silentMs=0;
+    if(len<RATE*0.35)return;                                   // te kort: ruis
+    pending++;onInterim("…");
+    transcribe(pcm,lang).then(t=>{t=(t||"").trim();if(t&&!aborted&&!/^[.…\s]*$/.test(t))onFinal(t,0.9)})
+      .catch(e=>logSpeechError("whisper: "+(e&&e.message||e)))
+      .finally(()=>{pending--;if(!aborted)onInterim("");done()});
+  };
+  navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}).then(st=>{
+    if(aborted||finishing){st.getTracks().forEach(t=>t.stop());finishing=true;return done()}
+    stream=st;MIC_STREAM=st;
+    ctx=new (window.AudioContext||window.webkitAudioContext)();src=ctx.createMediaStreamSource(st);
+    node=ctx.createScriptProcessor(4096,1,1);src.connect(node);node.connect(ctx.destination);
+    const ratio=ctx.sampleRate/RATE;
+    node.onaudioprocess=e=>{
+      if(finishing||aborted)return;
+      const inp=e.inputBuffer.getChannelData(0),n=Math.floor(inp.length/ratio),out=new Float32Array(n);
+      let sum=0;for(let i=0;i<n;i++){const x=inp[Math.floor(i*ratio)];out[i]=x;sum+=x*x}
+      const rms=Math.sqrt(sum/Math.max(1,n)),ms=inp.length/ctx.sampleRate*1000;
+      const loud=rms>Math.max(0.012,noise*3.5);
+      if(loud){if(!speaking){speaking=true;chunks.push(...pre);pre=[]}silentMs=0}
+      else{silentMs+=ms;if(!speaking)noise=noise*0.95+rms*0.05}
+      if(speaking){chunks.push(out);segMs+=ms}else{pre.push(out);if(pre.length>4)pre.shift()}   // klein stukje vóór de spraak bewaren
+      if(speaking&&silentMs>900)sendSeg();                        // zin klaar na korte stilte
+      else if(segMs>25000)sendSeg();                             // lange zin opknippen
+      if(Date.now()-lastShow>400){lastShow=Date.now();onInterim(speaking||pending?"…":"")}
+    };
+    try{ctx.resume()}catch(e){}
+    if($("warn").textContent===MIC_WARN)$("warn").style.display="none";
+  }).catch(err=>{logSpeechError("microfoon: "+(err&&err.name));if(!aborted){warn(MIC_WARN);onDenied()}ended=true});
+  r.finish=()=>{if(finishing)return;finishing=true;if(speaking||chunks.length)sendSeg();chunks=[];done();
+    setTimeout(()=>{if(!ended){pending=0;done()}},20000)};
+  r.stop=r.finish;
+  r.abort=()=>{aborted=true;finishing=true;chunks=[];ended=true;cleanup()};
+  return r;
+}
+
 function makeRec(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
+  if(USE_WHISPER)return makeRecWhisper(lang,continuous,{onFinal,onInterim,onEnd,onDenied});
   if(!SR)return null;
   const r=IOS?iosRec():new SR();r.lang=lang;r.continuous=continuous;r.interimResults=true;
   const t0=Date.now(),diag=[],D=ev=>{if(IOS&&diag.length<80)diag.push(((Date.now()-t0)/1000).toFixed(1)+":"+ev)};
@@ -1039,7 +1107,7 @@ document.addEventListener("click",e=>{
 document.addEventListener("visibilitychange",()=>{
   if(document.hidden)return;
   if(R.code&&!R.fatal&&!R.leaving&&(!R.ws||R.ws.readyState>1)){R.tries=0;connectWS()}
-  if(R.on&&!R.speaking){if(IOS){R.on=false;R.rec=null;renderR()}else setTimeout(()=>{if(R.on&&!R.speaking&&!document.hidden)startR()},700)}   // microfoon weer aan na terugkomst (niet op iPhone)
+  if(R.on&&!R.speaking){if(IOS&&!USE_WHISPER){R.on=false;R.rec=null;renderR()}else setTimeout(()=>{if(R.on&&!R.speaking&&!document.hidden)startR()},700)}   // microfoon weer aan na terugkomst (niet op iPhone)
 });
 /* verbinding levend houden (sommige netwerken sluiten stille verbindingen) */
 setInterval(()=>{if(R.ws&&R.ws.readyState===1)try{R.ws.send("ping")}catch(e){}},25000);
@@ -1063,7 +1131,7 @@ function onData(d){
       R.speaking=true;killRec(R.rec);R.rec=null;R.myLive="";renderR();
       sayStatus=rStatus;await wait(300);await say(e.tr,rLang());await wait(300);
       R.speaking=false;
-      if(R.on&&IOS){R.on=false;rStatus("Tik op de spreekknop om te antwoorden.");renderR()}   // iPhone: na voorlezen opnieuw tikken
+      if(R.on&&IOS&&!USE_WHISPER){R.on=false;rStatus("Tik op de spreekknop om te antwoorden.");renderR()}   // iPhone: na voorlezen opnieuw tikken
       else if(R.on)startR();else renderR();
     });
   }
@@ -1090,7 +1158,7 @@ function startR(){
     onFinal:(t,c)=>{const id=Date.now()+"-"+Math.random().toString(36).slice(2,6);R.mine.push({id,text:t,tr:"…"});send({t:"msg",id,text:t,lang:rLang(),conf:c})},
     onInterim:it=>{R.myLive=it;send({t:"live",text:it});renderR()},
     onEnd:()=>{R.myLive="";
-      if(IOS&&R.on&&R.rec===rec&&!R.speaking){R.on=false;R.rec=null;rStatus("De microfoon is gestopt. Tik op de spreekknop om verder te praten.");renderR();return}
+      if(IOS&&!USE_WHISPER&&R.on&&R.rec===rec&&!R.speaking){R.on=false;R.rec=null;rStatus("De microfoon is gestopt. Tik op de spreekknop om verder te praten.");renderR();return}
       renderR();setTimeout(()=>{if(R.on&&!R.speaking&&R.rec===rec&&!document.hidden)startR()},document.hidden?0:Date.now()-visibleAt<4000?800:150)},
     onDenied:()=>rMic(false)
   });
@@ -1158,7 +1226,7 @@ function finalTalk(text,conf){
     const wasOn=running;if(wasOn){tPaused=true;killRec(tRec);tRec=null}
     sayStatus=tStatus;tStatus("Voorlezen…");await wait(300);await say(outLines[i],t);await wait(300);
     tPaused=false;
-    if(wasOn&&running){if(IOS){running=false;uiTalk();tStatus("Tik op Start om verder te gaan.")}else startTalk()}
+    if(wasOn&&running){if(IOS&&!USE_WHISPER){running=false;uiTalk();tStatus("Tik op Start om verder te gaan.")}else startTalk()}
   });
 }
 function startTalk(){
@@ -1480,7 +1548,7 @@ new MutationObserver(fitSoon).observe(document.querySelector(".wrap"),{attribute
 /* 'Meer instellingen' standaard dicht, zodat het gesprek zo veel mogelijk ruimte heeft */
 
 /* ---------- nieuwe versie? (browsers bewaren de pagina soms tot 10 minuten) ---------- */
-const BUILD="20261126-0911";
+const BUILD="20261126-0920";
 async function checkUpdate(){
   try{const t=await (await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})).text();
     const m=t.match(/const BUILD="([^"]+)"/);if(m&&m[1]!==BUILD&&m[1]!=="__BUILD__")$("updateWarn").hidden=false}catch(e){}

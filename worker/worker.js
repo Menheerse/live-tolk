@@ -16,6 +16,7 @@
  *   POST /           zinnen opslaan in GitHub
  *   POST /translate  {text, source, target} -> {text} via DeepL
  *   POST /ui         {texts[], target} -> {texts[]}: app-teksten vertalen (DeepL, anders Google), 30 dagen bewaard
+ *   POST /stt?lang=  WAV-opname -> {text}: spraak naar tekst met Whisper (Cloudflare Workers AI), voor iPhone e.d.
  *   GET  /room/CODE  websocket naar de gespreksruimte (Durable Object 'Room') voor 'Op afstand'
  *
  * Deze Worker wordt automatisch vanuit GitHub gepubliceerd via Cloudflare Builds (zie wrangler.jsonc in deze map).
@@ -167,6 +168,27 @@ export default {
     if (request.method === "GET") return reply(200, { ok: true, dienst: "Live Tolk tussenstation", ruimtes: !!env.ROOMS, deepl: !!env.DEEPL_KEY });
     if (request.method !== "POST") return reply(405, { fout: "Alleen POST" });
     if (!okOrigin) return reply(403, { fout: "Niet toegestaan vanaf deze website" });
+
+    /* ---- spraak naar tekst (Whisper) voor toestellen zonder betrouwbare spraakherkenning (iPhone) ---- */
+    if (new URL(request.url).pathname.replace(/\/+$/, "") === "/stt") {
+      if (!env.AI) return reply(501, { fout: "Workers AI niet ingesteld" });
+      const buf = await request.arrayBuffer();
+      if (buf.byteLength < 1000) return reply(200, { text: "" });
+      if (buf.byteLength > 3_000_000) return reply(413, { fout: "Opname te lang" });
+      const lang = (new URL(request.url).searchParams.get("lang") || "").replace(/[^a-z]/gi, "").slice(0, 3).toLowerCase();
+      const bytes = new Uint8Array(buf);
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+      const input = { audio: btoa(bin), task: "transcribe", vad_filter: true };
+      if (lang) input.language = lang;
+      if (lang === "nl") input.initial_prompt = "Gesprek op de bouwplaats: bekisting, wapening, stekken, betonstort, rikker, torenkraan, steiger.";
+      try {
+        const r = await env.AI.run("@cf/openai/whisper-large-v3-turbo", input);
+        return reply(200, { text: (r && r.text || "").trim() });
+      } catch (e) {
+        return reply(502, { fout: "Spraakherkenning mislukt" });
+      }
+    }
 
     /* ---- app-teksten (knoppen, uitleg, meldingen) in de taal van de gebruiker ---- */
     if (new URL(request.url).pathname.replace(/\/+$/, "") === "/ui") {
