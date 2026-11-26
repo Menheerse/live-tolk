@@ -139,6 +139,7 @@ async function deeplTranslate(env, text, source, target) {
   return { status: 200, text: j.translations?.[0]?.text ?? "", woordenlijst: !!body.glossary_id };
 }
 
+const HALLUCINATION = /^(thank you( (so|very) much)?( for watching)?|thanks( for watching)?|bye( bye)?|you|hello\??|okay\??|but|and out|so|um+|uh+|hmm+|subtitles by.*|ondertiteling.*|ondertiteld door.*|bedankt voor het kijken.*|dank je wel( voor het kijken)?|tot de volgende keer.*|amara\.org.*|\.+|…|♪+)[.!?…]*$/i;
 const MAX_BODY = 200_000;   // bytes per verzending
 const MAX_ITEMS = 200;      // zinnen per verzending
 const FIELDS = ["tijd", "modus", "spreker", "van", "naar", "gesproken", "vertaling", "vertaaldienst", "herkenning", "ms"];
@@ -184,7 +185,16 @@ export default {
       if (lang === "nl") input.initial_prompt = "Gesprek op de bouwplaats: bekisting, wapening, stekken, betonstort, rikker, torenkraan, steiger.";
       try {
         const r = await env.AI.run("@cf/openai/whisper-large-v3-turbo", input);
-        return reply(200, { text: (r && r.text || "").trim() });
+        // Whisper verzint soms tekst bij ruis/stilte: stukken die volgens Whisper zelf geen spraak zijn weglaten
+        let text = (r && r.text || "").trim();
+        if (r && Array.isArray(r.segments) && r.segments.length) {
+          text = r.segments.filter(sg =>
+            (sg.no_speech_prob ?? 0) < 0.6 && (sg.avg_logprob ?? 0) > -1.0 && (sg.compression_ratio ?? 1) < 2.4
+          ).map(sg => (sg.text || "").trim()).join(" ").trim();
+        }
+        // bekende 'verzonnen' zinnetjes van Whisper
+        if (HALLUCINATION.test(text)) text = "";
+        return reply(200, { text });
       } catch (e) {
         return reply(502, { fout: "Spraakherkenning mislukt" });
       }

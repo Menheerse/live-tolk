@@ -580,7 +580,7 @@ async function transcribe(pcm,lang){
 }
 function makeRecWhisper(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
   const r={};let ended=false,finishing=false,aborted=false,ctx=null,node=null,src=null,stream=null;
-  let chunks=[],pre=[],speaking=false,silentMs=0,segMs=0,noise=0.008,pending=0,lastShow=0,t0=Date.now();
+  let chunks=[],pre=[],speaking=false,silentMs=0,segMs=0,loudMs=0,noise=0.008,pending=0,lastShow=0,t0=Date.now();
   const RATE=16000;
   const cleanup=()=>{try{node&&(node.onaudioprocess=null);node&&node.disconnect();src&&src.disconnect()}catch(e){}
     try{ctx&&ctx.close()}catch(e){}try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}MIC_STREAM=null};
@@ -588,8 +588,8 @@ function makeRecWhisper(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
   const sendSeg=()=>{
     if(!chunks.length)return;
     const len=chunks.reduce((a,c)=>a+c.length,0),pcm=new Float32Array(len);let o=0;for(const c of chunks){pcm.set(c,o);o+=c.length}
-    chunks=[];segMs=0;speaking=false;silentMs=0;
-    if(len<RATE*0.35)return;                                   // te kort: ruis
+    const loud=loudMs;chunks=[];segMs=0;loudMs=0;speaking=false;silentMs=0;
+    if(len<RATE*0.5||loud<450)return;                           // te kort of te weinig echte spraak: ruis, niet versturen
     pending++;onInterim("…");
     transcribe(pcm,lang).then(t=>{t=(t||"").trim();if(t&&!aborted&&!/^[.…\s]*$/.test(t))onFinal(t,0.9)})
       .catch(e=>logSpeechError("whisper: "+(e&&e.message||e)))
@@ -606,8 +606,8 @@ function makeRecWhisper(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
       const inp=e.inputBuffer.getChannelData(0),n=Math.floor(inp.length/ratio),out=new Float32Array(n);
       let sum=0;for(let i=0;i<n;i++){const x=inp[Math.floor(i*ratio)];out[i]=x;sum+=x*x}
       const rms=Math.sqrt(sum/Math.max(1,n)),ms=inp.length/ctx.sampleRate*1000;
-      const loud=rms>Math.max(0.012,noise*3.5);
-      if(loud){if(!speaking){speaking=true;chunks.push(...pre);pre=[]}silentMs=0}
+      const loud=rms>Math.max(0.02,noise*4);                    // duidelijk boven het achtergrondgeluid
+      if(loud){if(!speaking){speaking=true;chunks.push(...pre);pre=[]}silentMs=0;loudMs+=ms}
       else{silentMs+=ms;if(!speaking)noise=noise*0.95+rms*0.05}
       if(speaking){chunks.push(out);segMs+=ms}else{pre.push(out);if(pre.length>4)pre.shift()}   // klein stukje vóór de spraak bewaren
       if(speaking&&silentMs>900)sendSeg();                        // zin klaar na korte stilte
@@ -1548,7 +1548,7 @@ new MutationObserver(fitSoon).observe(document.querySelector(".wrap"),{attribute
 /* 'Meer instellingen' standaard dicht, zodat het gesprek zo veel mogelijk ruimte heeft */
 
 /* ---------- nieuwe versie? (browsers bewaren de pagina soms tot 10 minuten) ---------- */
-const BUILD="20261126-0920";
+const BUILD="20261126-0927";
 async function checkUpdate(){
   try{const t=await (await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})).text();
     const m=t.match(/const BUILD="([^"]+)"/);if(m&&m[1]!==BUILD&&m[1]!=="__BUILD__")$("updateWarn").hidden=false}catch(e){}
