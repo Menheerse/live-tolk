@@ -84,6 +84,9 @@ input[type=text],input[type=password]{width:100%}
 .tabs{grid-template-columns:repeat(3,minmax(0,1fr)) auto!important;width:min(100%,600px)!important}
 .helpbtn{width:auto;padding:8px 14px!important;color:#e46f2a!important;border-color:#e46f2a!important}
 .helpbox{max-width:640px;gap:6px}
+.uilabel{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;color:var(--ink)!important;font-size:15px}
+.uilabel svg{width:22px;height:22px;flex:none;stroke:currentColor;fill:none;stroke-width:1.6}
+.uilabel select{min-height:42px}
 .helphead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
 .helpbox details{border-top:1px solid var(--line);padding:4px 0}
 .helpbox summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font:600 17px "Space Grotesk",sans-serif}
@@ -231,6 +234,7 @@ input[type=text],input[type=password]{width:100%}
 <body>
 <div class="modal" id="consent" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
   <div class="mbox">
+    <label class="uilabel"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c2.6 2.8 3.9 6 3.9 9.5s-1.3 6.7-3.9 9.5c-2.6-2.8-3.9-6-3.9-9.5S9.4 5.3 12 2.5z"/></svg><select class="uilang" translate="no" aria-label="Taal van de app"></select></label>
     <h2 id="consentTitle">Voordat je begint</h2>
     <p>Live Tolk bewaart wat er gezegd wordt en de vertaling. Deze teksten worden <strong>automatisch verstuurd</strong> en gebruikt voor <strong>training en verbetering van de app</strong>.</p>
     <ul>
@@ -245,6 +249,7 @@ input[type=text],input[type=password]{width:100%}
 <div class="modal" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
   <div class="mbox helpbox">
     <div class="helphead"><h2 id="helpTitle">Uitleg Live Tolk</h2><button id="helpClose" aria-label="Uitleg sluiten">Sluiten</button></div>
+    <label class="uilabel"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c2.6 2.8 3.9 6 3.9 9.5s-1.3 6.7-3.9 9.5c-2.6-2.8-3.9-6-3.9-9.5S9.4 5.3 12 2.5z"/></svg><span>Taal van de app</span><select class="uilang" translate="no"></select></label>
     <details data-h="start"><summary>Aan de slag</summary>
       <ul>
         <li>Gebruik <b>Google Chrome</b> (Android of computer). Samsung Internet en Firefox kunnen geen spraak herkennen.</li>
@@ -306,7 +311,7 @@ input[type=text],input[type=password]{width:100%}
 <div class="viewer" id="viewer" hidden><img id="viewerImg" alt="Foto groot"><span>Tik om te sluiten</span></div>
 <div class="wrap">
   <div class="head">
-    <div class="brand"><img src="logo.png" alt="B-IM Menheerse – Bouw- en Informatiemanagement" class="logo" width="383" height="160"><h1>Live Tolk<span class="tagline">Spraak direct vertaald</span></h1><img src="denijs.png" alt="De Nijs bouw en ontwikkeling" class="logo partner" width="323" height="200"></div>
+    <div class="brand"><img src="logo.png" alt="B-IM Menheerse – Bouw- en Informatiemanagement" class="logo" width="383" height="160"><h1><span translate="no">Live Tolk</span><span class="tagline">Spraak direct vertaald</span></h1><img src="denijs.png" alt="De Nijs bouw en ontwikkeling" class="logo partner" width="323" height="200"></div>
     <div class="tabs" role="tablist">
       <button role="tab" id="tabConv" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3v-3H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="M17 9h3a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-4-3h-3"/></svg>Gesprek</button>
       <button role="tab" id="tabRemote" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="7" height="13" rx="1.5"/><rect x="15" y="7" width="7" height="13" rx="1.5"/><path d="M10.5 9.5c1.2-1 2.8-1 4 0M11.5 12c.6-.4 1.4-.4 2 0"/></svg>Op afstand</button>
@@ -359,7 +364,7 @@ input[type=text],input[type=password]{width:100%}
         </div>
       </div>
       <div class="lastroom" id="rLast" hidden>
-        <div><b>Laatste gesprek</b> · code <span class="codesm" id="rLastCode"></span><br><span id="rLastExp"></span></div>
+        <div><b>Laatste gesprek</b> · code <span class="codesm" id="rLastCode" translate="no"></span><br><span id="rLastExp"></span></div>
         <button class="mic" id="rLastBtn">Opnieuw verbinden</button>
       </div>
       <div class="rsetup">
@@ -368,7 +373,7 @@ input[type=text],input[type=password]{width:100%}
           <p>Je krijgt een code. Geef die door aan je gesprekspartner (bijv. via WhatsApp of telefoon). Met dezelfde code kunnen jullie later opnieuw verbinden.</p>
           <label>Code geldig<select id="rValid"><option value="dag">Vandaag (tot 24:00)</option><option value="24u">24 uur</option><option value="week">1 week</option></select></label>
           <button class="mic" id="rNew">Maak gesprekscode</button>
-          <div id="rCodeBox" hidden><p>Gesprekscode</p><div class="codebig" id="rCode"></div><p>Wachten tot de ander deelneemt…</p></div>
+          <div id="rCodeBox" hidden><p>Gesprekscode</p><div class="codebig" id="rCode" translate="no"></div><p>Wachten tot de ander deelneemt…</p></div>
         </div>
         <div class="card">
           <h2>Deelnemen aan gesprek</h2>
@@ -479,7 +484,7 @@ const opts=sel=>LANGS.map(([c,n,nat])=>`<option value="${c}"${c===sel?" selected
 const statusOf=id=>t=>{$(id).textContent=t};
 const warn=t=>{$("warn").textContent=t;$("warn").style.display="block"};
 const scrollEnd=(...els)=>els.forEach(el=>el.scrollTop=1e9);
-const lineHTML=(main,sub,cls="")=>`<p class="line ${cls}">${esc(main)}${sub?`<span class="sub">${esc(sub)}</span>`:""}</p>`;
+const lineHTML=(main,sub,cls="")=>`<p class="line ${cls}" translate="no">${esc(main)}${sub?`<span class="sub">${esc(sub)}</span>`:""}</p>`;
 const emptyHTML=t=>`<p class="empty">${t}</p>`;
 
 let store={};try{store=JSON.parse(localStorage.getItem("livetolk2")||"{}")}catch(e){}
@@ -760,7 +765,7 @@ function renderConv(){
     const langs=[...new Set(people.map(p=>code(p.lang)))];
     $("log").innerHTML=log.map(e=>{
       const others=langs.filter(c=>c!==code(e.lang));
-      return `<div class="msg${e.p%2?" r":""}" style="--c:${COLORS[e.p]}"><div class="who"><span>${esc(e.who)}</span><span>${e.time}</span></div><p class="orig">${esc(e.text)}</p>${others.map(c=>`<p class="tr">${others.length>1?`<small>${c.toUpperCase()}</small>`:""}${esc(e.tr[c]??"…")}</p>`).join("")}</div>`;
+      return `<div class="msg${e.p%2?" r":""}" style="--c:${COLORS[e.p]}"><div class="who"><span>${esc(e.who)}</span><span>${e.time}</span></div><p class="orig" translate="no">${esc(e.text)}</p>${others.map(c=>`<p class="tr" translate="no">${others.length>1?`<small>${c.toUpperCase()}</small>`:""}${esc(e.tr[c]??"…")}</p>`).join("")}</div>`;
     }).join("")+(liveText?`<div class="msg live${active%2?" r":""}" style="--c:${COLORS[active]}">${esc(liveText)}</div>`:"")
       ||emptyHTML("Tik op je eigen knop en begin te praten.<br>Iedereen ziet de vertaling in zijn eigen taal.");
     scrollEnd($("log"));
@@ -1077,8 +1082,8 @@ const from=$("from"),to=$("to"),tStatus=statusOf("tStatus"),tSpeak=persist("tSpe
 from.innerHTML=opts(store.from||"nl-NL");to.innerHTML=opts(store.to||"en-GB");
 let tRec=null,running=false,tPaused=false,srcLines=[],outLines=[],interim="",tQueue=Promise.resolve();
 function renderTalk(){
-  $("srcTxt").innerHTML=srcLines.map(l=>`<p>${esc(l)}</p>`).join("")+(interim?`<p class="live">${esc(interim)}</p>`:"")||emptyHTML("Druk op Start en begin te praten.");
-  $("outTxt").innerHTML=outLines.map(l=>`<p>${esc(l)}</p>`).join("")||emptyHTML("Hier verschijnt de vertaling.");
+  $("srcTxt").innerHTML=srcLines.map(l=>`<p translate="no">${esc(l)}</p>`).join("")+(interim?`<p class="live" translate="no">${esc(interim)}</p>`:"")||emptyHTML("Druk op Start en begin te praten.");
+  $("outTxt").innerHTML=outLines.map(l=>`<p translate="no">${esc(l)}</p>`).join("")||emptyHTML("Hier verschijnt de vertaling.");
   scrollEnd($("srcTxt").parentElement,$("outTxt").parentElement);
 }
 function finalTalk(text,conf){
@@ -1259,7 +1264,7 @@ function lState(t,c=""){$("lState").className="pill "+c;$("lState").lastElementC
 function bShowListen(on){$("listenView").hidden=!on;$("speakView").hidden=on;$("bJoinBox").hidden=on;fitSoon()}
 function renderListen(){
   const orig=$("lOrig").checked;
-  $("lLines").innerHTML=B.lines.map(l=>`<p>${esc(l.text)}${orig&&l.orig!==l.text?`<small>${esc(l.orig)}</small>`:""}</p>`).join("")||`<p class="empty" style="font-size:16px">Wacht tot de spreker begint. De toespraak verschijnt hier in het ${esc(name(B.lang))}.</p>`;
+  $("lLines").innerHTML=B.lines.map(l=>`<p translate="no">${esc(l.text)}${orig&&l.orig!==l.text?`<small>${esc(l.orig)}</small>`:""}</p>`).join("")||`<p class="empty" style="font-size:16px">Wacht tot de spreker begint. De toespraak verschijnt hier in het ${esc(name(B.lang))}.</p>`;
   $("lLines").scrollTop=1e9;
 }
 async function onZin(d){
@@ -1296,6 +1301,98 @@ setInterval(()=>{if(B.ws&&B.ws.readyState===1)try{B.ws.send("ping")}catch(e){}},
 function hashJoin(){const m=location.hash.match(/^#luister-([A-Z0-9]{6})$/i);if(!m)return;
   tab("talk");$("bCode").value=m[1].toUpperCase();bTxt("Kies je taal en tik op Meeluisteren.");$("bLang").focus()}
 window.addEventListener("hashchange",hashJoin);
+
+/* ---------- APP-TAAL: alle knoppen, uitleg en meldingen in de taal van de gebruiker ----------
+   De app is in het Nederlands geschreven. Bij een andere taal worden alle teksten op de pagina
+   (ook later verschijnende meldingen) in één keer via het tussenstation vertaald en op dit toestel
+   bewaard. Gesprekstekst, namen en codes (translate="no") worden nooit aangeraakt.
+   Getallen en codes worden vervangen door {0}, {1} …, zodat één vertaling voor alle waarden werkt. */
+const UI={lang:"nl",dict:{},want:new Set(),failed:new Set(),busy:false,applying:false,origT:new WeakMap(),doneT:new WeakMap(),origA:new WeakMap()};
+const UI_ATTRS=["placeholder","title","aria-label","alt"];
+const UI_LANGS=LANGS.map(l=>code(l[0]));
+const hasWords=t=>/[A-Za-zÀ-ÿ]{2,}/.test(t);
+function uiTmpl(t){const v=[];const k=t.replace(/\b(?=[A-Z0-9]*\d)[A-Z0-9]{6}\b|\d+(?:[.,:]\d+)*/g,m=>{v.push(m);return "{"+(v.length-1)+"}"});return [k,v]}
+const uiFill=(k,v)=>k.replace(/\{(\d+)\}/g,(m,i)=>v[+i]??m);
+function uiTr(s){
+  if(UI.lang==="nl"||!hasWords(s))return s;
+  const lead=s.match(/^\s*/)[0],trail=s.match(/\s*$/)[0],[k,v]=uiTmpl(s.trim());
+  const d=UI.dict[k];
+  if(d==null){if(!UI.failed.has(k))UI.want.add(k);return s}
+  return lead+uiFill(d,v)+trail;
+}
+/* zinnen met vetgedrukte/schuine woorden (uitleg, toestemming) in hun geheel vertalen */
+const UI_BLOCKS="#help li,#help p,#consent li,#consent p,.joinbox b";
+const INLINE=new Set(["B","I","STRONG","EM","BR"]);
+function applyBlocks(){
+  for(const el of document.querySelectorAll(UI_BLOCKS)){
+    if(![...el.children].length||![...el.children].every(c=>INLINE.has(c.tagName)))continue;
+    if(!el.dataset.uiOrig)el.dataset.uiOrig=el.innerHTML;
+    const orig=el.dataset.uiOrig;
+    let html=orig;
+    if(UI.lang!=="nl"){const k="§"+orig.replace(/\s+/g," ").trim(),d=UI.dict[k];
+      if(d==null){if(!UI.failed.has(k))UI.want.add(k)}else html=d.replace(/<(?!\/?(b|i|strong|em|br)\b)[^>]*>/gi,"")}   // alleen eenvoudige opmaak toestaan
+    if(el.innerHTML!==html)el.innerHTML=html;
+    el.dataset.uiBlock="1";
+  }
+}
+function uiSkip(n){
+  const p=n.parentElement;if(!p)return true;
+  if(p.closest('[translate="no"],script,style,[data-ui-block]'))return true;
+  const o=p.closest("option");return !!(o&&/^[a-z]{2}-[A-Z]{2}$/.test(o.value));
+}
+function applyUI(){
+  UI.applying=true;
+  applyBlocks();
+  const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;
+  while((n=w.nextNode())){
+    const cur=n.nodeValue;if(!cur.trim()||uiSkip(n))continue;
+    if(UI.doneT.get(n)!==cur)UI.origT.set(n,cur);        // nieuwe (Nederlandse) tekst van de app
+    const out=uiTr(UI.origT.get(n));
+    if(out!==cur)n.nodeValue=out;
+    UI.doneT.set(n,out);
+  }
+  for(const el of document.body.querySelectorAll("[placeholder],[title],[aria-label],img[alt]")){
+    if(el.closest('[translate="no"]'))continue;
+    let m=UI.origA.get(el);if(!m){m={};UI.origA.set(el,m)}
+    for(const a of UI_ATTRS){const v=el.getAttribute(a);if(v==null)continue;
+      if(m["_"+a]!==v)m[a]=v;
+      const out=uiTr(m[a]);if(out!==v)el.setAttribute(a,out);m["_"+a]=out}
+  }
+  UI.applying=false;
+  if(UI.want.size)fetchUI();
+}
+let uiTimer=0;
+new MutationObserver(()=>{if(UI.applying)return;clearTimeout(uiTimer);uiTimer=setTimeout(applyUI,30)})
+  .observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:UI_ATTRS});
+async function fetchUI(){
+  if(UI.busy)return;UI.busy=true;
+  const lang=UI.lang,keys=[...UI.want].slice(0,400);keys.forEach(k=>UI.want.delete(k));
+  let ok=false;
+  try{
+    const base=($("ghUrl").value.trim()||WORKER_URL).replace(/\/+$/,"");
+    const r=await fetch(base+"/ui",{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({texts:keys.map(k=>k.replace(/^§/,"")),target:lang})});
+    if(r.ok){const j=await r.json();if(lang===UI.lang&&Array.isArray(j.texts)){keys.forEach((k,i)=>{if(j.texts[i])UI.dict[k]=j.texts[i]});ok=true;
+      try{localStorage.setItem("livetolk-ui-"+lang,JSON.stringify(UI.dict))}catch(e){}}}
+  }catch(e){}
+  if(!ok&&lang===UI.lang)keys.forEach(k=>UI.failed.add(k));   // niet blijven proberen; Nederlands laten staan
+  UI.busy=false;
+  if(lang===UI.lang)applyUI();
+}
+function setUiLang(l){
+  const c=code(l||"nl");if(!UI_LANGS.includes(c))return;
+  if(c!==UI.lang){UI.lang=c;UI.failed=new Set();UI.want=new Set();
+    try{UI.dict=JSON.parse(localStorage.getItem("livetolk-ui-"+c)||"{}")}catch(e){UI.dict={}}}
+  store.uiLang=c;save();document.documentElement.lang=c;
+  document.querySelectorAll("select.uilang").forEach(sel=>{sel.value=LANGS.find(x=>code(x[0])===c)[0]});
+  applyUI();
+}
+document.querySelectorAll("select.uilang").forEach(sel=>{
+  sel.innerHTML=LANGS.map(([c,n,nat])=>`<option value="${c}">${nat||n}</option>`).join("");
+  sel.addEventListener("change",()=>setUiLang(sel.value));
+});
+/* eigen taal gekozen bij Op afstand of Meeluisteren: app meteen in die taal */
+$("rLang").addEventListener("change",()=>{if($("rLang").value)setUiLang($("rLang").value)});
+$("bLang").addEventListener("change",()=>{if($("bLang").value)setUiLang($("bLang").value)});
 
 /* ---------- schermgrootte: gespreksvlakken precies passend maken ---------- */
 function fit(el,below){
@@ -1334,6 +1431,7 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("help").hidden)c
 renderPeople();renderTalk();
 tab(TABS[store.tab]?store.tab:"conv");
 hashJoin();
+setUiLang(store.uiLang||(navigator.languages||[navigator.language||"nl"]).map(l=>code(String(l).toLowerCase())).find(c=>UI_LANGS.includes(c))||"nl");
 }
 </script>
 </body>

@@ -15,6 +15,7 @@
  * Routes:
  *   POST /           zinnen opslaan in GitHub
  *   POST /translate  {text, source, target} -> {text} via DeepL
+ *   POST /ui         {texts[], target} -> {texts[]}: app-teksten vertalen (DeepL, anders Google), 30 dagen bewaard
  *   GET  /room/CODE  websocket naar de gespreksruimte (Durable Object 'Room') voor 'Op afstand'
  *
  * Deze Worker wordt automatisch vanuit GitHub gepubliceerd via Cloudflare Builds (zie wrangler.jsonc in deze map).
@@ -93,6 +94,31 @@ async function glossaryFor(env, source, target) {
   return gl.id && gl.pairs.has(`${source}>${target}`) ? gl.id : null;
 }
 
+/* Lijst teksten in één keer (DeepL max. 50 per verzoek); {0}, {1} … blijven staan */
+async function deeplBatch(env, texts, target) {
+  const key = env.DEEPL_KEY, out = [];
+  for (let i = 0; i < texts.length; i += 50) {
+    const r = await fetch(`${deeplHost(key)}/v2/translate`, { method: "POST", headers: deeplHeaders(key),
+      body: JSON.stringify({ text: texts.slice(i, i + 50), source_lang: "NL", target_lang: DEEPL_TARGET[target] || target.toUpperCase(), preserve_formatting: true, tag_handling: "html" }) });
+    if (!r.ok) return null;                                   // bijv. taal niet ondersteund -> Google
+    out.push(...(await r.json()).translations.map(t => t.text));
+  }
+  return out;
+}
+async function googleBatch(texts, target) {
+  const out = [];
+  for (let i = 0; i < texts.length; i += 40) {                // enkele verzoeken, regels gescheiden
+    const part = texts.slice(i, i + 40);
+    const r = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=nl&tl=${target}&dt=t`, {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "q=" + encodeURIComponent(part.join("\n")) });
+    if (!r.ok) return null;
+    const lines = (await r.json())[0].map(x => x[0]).join("").split("\n");
+    if (lines.length !== part.length) return null;
+    out.push(...lines.map(l => l.trim()));
+  }
+  return out;
+}
+
 async function deeplTranslate(env, text, source, target) {
   const key = env.DEEPL_KEY;
   const host = deeplHost(key);
@@ -141,6 +167,28 @@ export default {
     if (request.method === "GET") return reply(200, { ok: true, dienst: "Live Tolk tussenstation", ruimtes: !!env.ROOMS, deepl: !!env.DEEPL_KEY });
     if (request.method !== "POST") return reply(405, { fout: "Alleen POST" });
     if (!okOrigin) return reply(403, { fout: "Niet toegestaan vanaf deze website" });
+
+    /* ---- app-teksten (knoppen, uitleg, meldingen) in de taal van de gebruiker ---- */
+    if (new URL(request.url).pathname.replace(/\/+$/, "") === "/ui") {
+      let q;
+      try { q = JSON.parse(await request.text()); } catch { return reply(400, { fout: "Geen geldige JSON" }); }
+      const texts = (Array.isArray(q.texts) ? q.texts : []).slice(0, 400).map(t => String(t).slice(0, 1500));
+      const target = String(q.target || "").replace(/[^a-z]/gi, "").slice(0, 3).toLowerCase();
+      if (!texts.length || !target) return reply(400, { fout: "texts en target zijn verplicht" });
+      if (target === "nl") return reply(200, { texts });
+      // gedeelde opslag: zelfde teksten + taal worden maar één keer vertaald
+      const key = new Request(`https://cache.live-tolk/ui/${target}/${await sha(JSON.stringify(texts))}`);
+      const cache = caches.default;
+      const hit = await cache.match(key);
+      if (hit) return reply(200, await hit.json());
+      let out = null, dienst = "deepl";
+      if (env.DEEPL_KEY) out = await deeplBatch(env, texts, target).catch(() => null);
+      if (!out) { dienst = "google"; out = await googleBatch(texts, target).catch(() => null); }
+      if (!out) return reply(502, { fout: "Vertalen mislukt" });
+      const body = { texts: out, dienst };
+      await cache.put(key, new Response(JSON.stringify(body), { headers: { "Cache-Control": "public, max-age=2592000" } }));
+      return reply(200, body);
+    }
 
     /* ---- vertalen via DeepL ---- */
     if (new URL(request.url).pathname.replace(/\/+$/, "") === "/translate") {
