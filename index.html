@@ -538,14 +538,20 @@ const SETTLE_MS=1500;
    Dat is geen echte weigering: dan geen melding tonen en later gewoon opnieuw proberen. */
 let visibleAt=Date.now();
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)visibleAt=Date.now()});
+const MIC_RESTART="De microfoon is gestopt. Tik opnieuw op de spreekknop om verder te praten.";
 const MIC_WARN=IOS
   ?"Spraak werkt nog niet. Op de iPhone: 1) Instellingen → Siri → Siri aan (of Algemeen → Toetsenbord → Dicteren aan); 2) Instellingen → Privacy en beveiliging → Spraakherkenning → Safari aan; 3) in Safari: aA → Website-instellingen → Microfoon → Sta toe. Laad daarna de pagina opnieuw."
   :"Geen toegang tot de microfoon. Sta de microfoon toe (slotje in de adresbalk) en probeer opnieuw.";
 const norm=x=>x.toLowerCase().replace(/[^\p{L}\p{N} ]/gu,"").replace(/\s+/g," ").trim();
 function makeRec(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
   if(!SR)return null;
-  const r=new SR();r.lang=lang;r.continuous=IOS?false:continuous;r.interimResults=true;
-  let pend="",pc=0,tm=null,last="",lastAt=0,lastIt="",finishing=false,ended=false;
+  const r=new SR();r.lang=lang;r.continuous=continuous;r.interimResults=true;
+  let pend="",pc=0,tm=null,last="",lastAt=0,lastIt="",finishing=false,ended=false,started=false;
+  /* iPhone (Safari): blijft doorlopend luisteren, maar markeert zinnen vaak nooit als 'definitief' en
+     plakt alles aan elkaar. Daarom: na een korte stilte het nieuwe stuk tekst zelf als zin versturen. */
+  let iosSent=0,iosT=null,iosFull="";
+  const iosWords=()=>iosFull.split(" ").filter(Boolean);
+  const iosFlush=()=>{clearTimeout(iosT);const w=iosWords(),d=w.slice(iosSent).join(" ");if(d){iosSent=w.length;emit(d,0)}lastIt=""};
   const emit=(t,c)=>{
     const n=norm(t);if(!n)return;
     if(n===last&&Date.now()-lastAt<5000)return;            // zelfde zin vlak na elkaar: één keer
@@ -561,7 +567,15 @@ function makeRec(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
     if(typeof c==="number"&&c>0)return commit();             // echte, afgeronde zin
     clearTimeout(tm);tm=setTimeout(()=>{commit();onInterim("")},SETTLE_MS);
   };
-  r.onresult=e=>{let it="";for(let i=e.resultIndex;i<e.results.length;i++){const x=e.results[i];
+  r.onresult=e=>{
+    if(IOS){
+      iosFull=Array.from(e.results).map(x=>x[0].transcript).join(" ").replace(/\s+/g," ").trim();
+      const w=iosWords();if(w.length<iosSent)iosSent=0;            // Safari is opnieuw begonnen
+      lastIt=w.slice(iosSent).join(" ");onInterim(lastIt);
+      clearTimeout(iosT);if(lastIt)iosT=setTimeout(()=>{iosFlush();onInterim("")},SETTLE_MS);
+      return;
+    }
+    let it="";for(let i=e.resultIndex;i<e.results.length;i++){const x=e.results[i];
     if(x.isFinal){const t=x[0].transcript.trim();if(t)final(t,x[0].confidence)}else it+=x[0].transcript}
     lastIt=it.trim();
     if(lastIt&&pend&&tm){clearTimeout(tm);tm=setTimeout(()=>{commit();onInterim("")},SETTLE_MS)}   // nog aan het praten: wachten
@@ -571,12 +585,13 @@ function makeRec(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
     if(e.error==="not-allowed"||e.error==="service-not-allowed"){
       if(document.hidden||Date.now()-visibleAt<4000)return;   // net terug in de app: tijdelijk, geen melding
       if(BAD_BROWSER===null)warn(MIC_WARN);onDenied()}};
-  r.onstart=()=>{if($("warn").textContent===MIC_WARN)$("warn").style.display="none"};
+  r.onstart=()=>{started=true;if([MIC_WARN,MIC_RESTART].includes($("warn").textContent))$("warn").style.display="none"};
   /* afronden: alles wat al gezegd is (ook nog niet afgeronde tekst) alsnog doorgeven */
   const flushAll=()=>{
+    if(IOS)return iosFlush();
     if(lastIt&&pend&&norm(lastIt).startsWith(norm(pend))){pend=lastIt;lastIt=""}   // nog lopende zin is een verlenging: één zin
     commit();if(lastIt){const t=lastIt;lastIt="";emit(t,0)}};
-  r.onend=()=>{ended=true;if(finishing||IOS)flushAll();else commit();onEnd()};   // iPhone geeft soms geen 'definitief': dan de laatste tekst gebruiken
+  r.onend=()=>{ended=true;if(finishing||IOS)flushAll();else commit();onEnd()};
   /* portofoon: stoppen = versturen. Chrome levert na stop() nog de laatste woorden; anders na 1,5 s zelf afronden */
   r.finish=()=>{
     if(finishing||ended)return;finishing=true;
@@ -584,6 +599,9 @@ function makeRec(lang,continuous,{onFinal,onInterim,onEnd,onDenied}){
     setTimeout(()=>{if(!ended){ended=true;r.onresult=r.onend=r.onerror=null;try{r.abort()}catch(e){}flushAll();onEnd()}},1500);
   };
   try{r.start()}catch(e){logSpeechError("start: "+(e&&e.name||e))}
+  /* start de microfoon niet (bijv. iPhone zonder tik), stop dan netjes en vraag om opnieuw te tikken */
+  setTimeout(()=>{if(!started&&!ended&&!finishing&&!document.hidden){logSpeechError("microfoon start niet");
+    ended=true;r.onresult=r.onend=r.onerror=null;try{r.abort()}catch(e){}warn(MIC_RESTART);onDenied()}},3000);
   return r;
 }
 
