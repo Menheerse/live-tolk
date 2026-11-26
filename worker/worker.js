@@ -210,14 +210,22 @@ function endOfDayAmsterdam(now) {
   return now + ((23 - p.hour) * 3600 + (59 - p.minute) * 60 + (60 - p.second)) * 1000;
 }
 export class Room {
+  /* Twee soorten ruimtes:
+     - gesprek:   één 'maker' en één 'deelnemer'; alles wat de één stuurt gaat naar de ander.
+     - toespraak: één 'spreker' en tot 300 'luisteraars'; alleen de spreker stuurt, naar alle luisteraars.
+       De spreker krijgt steeds door hoeveel luisteraars er zijn, per taal. */
   constructor(state) {
     this.state = state;
     this.state.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
   async fetch(request) {
     const url = new URL(request.url);
-    const role = url.searchParams.get("role") === "maker" ? "maker" : "deelnemer";
+    const ROLES = ["maker", "deelnemer", "spreker", "luisteraar"];
+    const role = ROLES.includes(url.searchParams.get("role")) ? url.searchParams.get("role") : "deelnemer";
+    const creator = role === "maker" || role === "spreker";
+    const type = role === "spreker" || role === "luisteraar" ? "toespraak" : "gesprek";
     const sid = (url.searchParams.get("id") || "").replace(/[^a-z0-9]/gi, "").slice(0, 16) || "x";
+    const lang = (url.searchParams.get("lang") || "").replace(/[^a-z-]/gi, "").slice(0, 8);
     const nieuw = url.searchParams.get("nieuw") === "1";
     const geldig = GELDIG[url.searchParams.get("geldig")] ? url.searchParams.get("geldig") : "dag";
     const [client, server] = Object.values(new WebSocketPair());
@@ -232,31 +240,69 @@ export class Room {
       server.close(4000, err);
       return new Response(null, { status: 101, webSocket: client });
     };
-    if (nieuw && role === "maker") {
+    if (nieuw && creator) {
       if (meta) return refuse("in-gebruik");          // code bestaat al: app kiest een andere
-      meta = { expires: geldig === "dag" ? endOfDayAmsterdam(now) : now + GELDIG[geldig], geldig };
+      meta = { expires: geldig === "dag" ? endOfDayAmsterdam(now) : now + GELDIG[geldig], geldig, type };
       await this.state.storage.put("meta", meta);
     }
     if (!meta) return refuse(nieuw ? "in-gebruik" : "niet-gevonden");   // onbekend of verlopen
+    if ((meta.type || "gesprek") !== type) return refuse(type === "toespraak" ? "geen-toespraak" : "is-toespraak");
 
     const tags = ws => this.state.getTags(ws);
     let sockets = this.state.getWebSockets();
     // zelfde toestel komt terug: oude verbinding opruimen
     for (const ws of sockets) if (tags(ws).includes("id:" + sid)) { try { ws.close(4001, "vervangen"); } catch {} }
     sockets = sockets.filter(ws => !tags(ws).includes("id:" + sid));
-    if (sockets.some(ws => tags(ws).includes(role))) return refuse(role === "maker" ? "in-gebruik" : "vol");
+    if (role === "luisteraar") {
+      if (sockets.filter(ws => tags(ws).includes("luisteraar")).length >= 300) return refuse("vol");
+    } else if (sockets.some(ws => tags(ws).includes(role))) return refuse(creator ? "in-gebruik" : "vol");
 
-    this.state.acceptWebSocket(server, [role, "id:" + sid]);
-    server.send(JSON.stringify({ t: "_sys", ev: "joined", peers: sockets.length, expires: meta.expires }));
-    for (const ws of sockets) { try { ws.send(JSON.stringify({ t: "_sys", ev: "peer-joined" })); } catch {} }
+    this.state.acceptWebSocket(server, [role, "id:" + sid, "lang:" + lang]);
+    if (type === "toespraak") {
+      const speaker = sockets.some(ws => tags(ws).includes("spreker"));
+      server.send(JSON.stringify({ t: "_sys", ev: "joined", peers: role === "spreker" ? 0 : (speaker ? 1 : 0), expires: meta.expires }));
+      if (role === "luisteraar") this.notify("spreker", { t: "_sys", ev: "peer-joined" }, server);
+      else this.notify("luisteraar", { t: "_sys", ev: "peer-joined" }, server);
+      this.listeners();
+    } else {
+      server.send(JSON.stringify({ t: "_sys", ev: "joined", peers: sockets.length, expires: meta.expires }));
+      for (const ws of sockets) { try { ws.send(JSON.stringify({ t: "_sys", ev: "peer-joined" })); } catch {} }
+    }
     return new Response(null, { status: 101, webSocket: client });
+  }
+  notify(role, obj, except) {
+    const msg = JSON.stringify(obj);
+    for (const ws of this.state.getWebSockets()) if (ws !== except && this.state.getTags(ws).includes(role)) { try { ws.send(msg); } catch {} }
+  }
+  /* spreker op de hoogte houden: aantal luisteraars per taal */
+  listeners(except) {
+    const talen = {};
+    for (const ws of this.state.getWebSockets()) {
+      if (ws === except) continue;
+      const t = this.state.getTags(ws);
+      if (!t.includes("luisteraar")) continue;
+      const l = (t.find(x => x.startsWith("lang:")) || "lang:").slice(5) || "?";
+      talen[l] = (talen[l] || 0) + 1;
+    }
+    this.notify("spreker", { t: "_sys", ev: "luisteraars", talen }, except);
   }
   webSocketMessage(ws, msg) {
     if (typeof msg !== "string" || msg.length > 1000000 || msg === "ping") return;   // ruim genoeg voor een verkleinde foto
+    const t = this.state.getTags(ws);
+    if (t.includes("luisteraar")) return;                         // luisteraars sturen niets door
+    if (t.includes("spreker")) return this.broadcast(msg, ws);
     for (const other of this.state.getWebSockets()) if (other !== ws) { try { other.send(msg); } catch {} }
   }
+  broadcast(msg, except) {
+    for (const ws of this.state.getWebSockets()) if (ws !== except && this.state.getTags(ws).includes("luisteraar")) { try { ws.send(msg); } catch {} }
+  }
   webSocketClose(ws, code, reason) {
-    if (code !== 4001) for (const other of this.state.getWebSockets()) if (other !== ws) { try { other.send(JSON.stringify({ t: "_sys", ev: "peer-left" })); } catch {} }
+    const t = this.state.getTags(ws);
+    if (code !== 4001) {
+      if (t.includes("luisteraar")) this.listeners(ws);
+      else if (t.includes("spreker")) this.notify("luisteraar", { t: "_sys", ev: "peer-left" }, ws);
+      else for (const other of this.state.getWebSockets()) if (other !== ws) { try { other.send(JSON.stringify({ t: "_sys", ev: "peer-left" })); } catch {} }
+    }
     try { ws.close(code === 1005 ? 1000 : code, reason); } catch {}
   }
   webSocketError(ws) { this.webSocketClose(ws, 1011, "fout"); }

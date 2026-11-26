@@ -128,6 +128,16 @@ input[type=text],input[type=password]{width:100%}
 .codesm{font:700 18px "Space Grotesk",sans-serif;letter-spacing:.06em}
 .lost{background:#fde2cf;color:#6b2a00;border-radius:14px;padding:14px 16px;margin-bottom:10px;display:grid;gap:10px;font-size:15px}
 .lost p{margin:0}.lost .row{gap:8px}
+.joinbox{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:end;justify-content:space-between;border:2px dashed var(--line);border-radius:16px;padding:12px 16px;margin-bottom:14px;font-size:15px}
+.joinbox span{color:var(--mut)}
+.sharebar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:-4px 0 14px}
+.sharebtn{display:flex;gap:8px;align-items:center;border-color:#e46f2a;color:#b4531a;font-weight:600}
+.sharebtn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.sharebar .pill{font-size:15px;background:#fde2cf;color:#6b2a00}
+.listen{height:var(--fit,60vh);min-height:260px;overflow-y:auto;background:var(--field);color:var(--mintink);border-radius:16px;padding:18px 22px}
+.listen p{font:500 clamp(22px,3vw,34px)/1.3 "Space Grotesk",sans-serif;margin:0 0 16px}
+.listen p:last-child{font-weight:700}
+.listen p small{display:block;font:400 14px Inter,sans-serif;opacity:.75;margin-top:2px}
 .more{flex-basis:100%}
 .more>summary{cursor:pointer;min-height:44px;display:inline-flex;align-items:center;color:var(--mut);font-size:15px}
 .more>summary:hover{color:var(--ink)}
@@ -267,8 +277,10 @@ input[type=text],input[type=password]{width:100%}
         <li>De code blijft geldig tot vanavond 24:00 (of 24 uur / 1 week). Met <b>Opnieuw verbinden</b> bij <i>Laatste gesprek</i> ga je terug.</li>
         <li>Valt de verbinding weg, dan verbindt de app vanzelf opnieuw. Lukt dat niet, kies <i>Terug naar dit gesprek</i> of <i>Nieuw gesprek</i>.</li>
       </ol></details>
-    <details data-h="talk"><summary>Toespraak – één spreker</summary>
+    <details data-h="talk"><summary>Toespraak – één spreker, veel luisteraars</summary>
       <ol>
+        <li><b>Luisteraars</b>: vul de code van de spreker in bij <i>Meeluisteren</i>, kies je taal en tik op <b>Meeluisteren</b>. Je ziet en hoort de toespraak in je eigen taal. Houd je telefoon aan (het scherm blijft vanzelf aan).</li>
+        <li><b>Spreker</b>: tik op <b>Luisteraars laten meeluisteren</b>, deel de code (of <i>Kopieer link</i>) en tik op <b>Start</b>. Je ziet hoeveel mensen meeluisteren, per taal.</li>
         <li>Kies <i>Ik spreek</i> en <i>Vertaal naar</i> (⇄ wisselt om).</li>
         <li>Tik op <b>Start</b>; de app luistert doorlopend en vertaalt zin voor zin.</li>
         <li><i>Grote letters</i> is handig op een tv of beamer.</li>
@@ -389,11 +401,38 @@ input[type=text],input[type=password]{width:100%}
 
   <!-- TOESPRAAK -->
   <section id="talk" hidden>
+    <div class="joinbox" id="bJoinBox">
+      <div><b>Meeluisteren met een toespraak?</b><br><span>Vul de code van de spreker in en kies je taal.</span></div>
+      <div class="top" style="margin:0">
+        <label>Code<input type="text" id="bCode" maxlength="6" placeholder="ABC123" autocapitalize="characters" autocomplete="off" style="width:130px"></label>
+        <label>Mijn taal<select id="bLang"></select></label>
+        <button class="mic" id="bJoin">Meeluisteren</button>
+      </div>
+      <p class="status" id="bJoinStatus" style="margin:0"></p>
+    </div>
+    <div id="listenView" hidden>
+      <div class="opts" style="margin:0 0 10px">
+        <span class="pill" id="lState"><i></i><span>Verbinden…</span></span>
+        <span class="pill" id="lCodePill"></span>
+        <label><input type="checkbox" id="lSpeak"> Voorlezen</label>
+        <label><input type="checkbox" id="lOrig"> Toon origineel</label>
+        <button id="lStop" style="margin-left:auto">Stoppen met meeluisteren</button>
+      </div>
+      <div class="lost" id="lLost" hidden><p id="lLostTxt"></p><div class="row"><button class="mic" id="lBack">Opnieuw verbinden</button><button id="lQuit">Stoppen</button></div></div>
+      <div class="listen" id="lLines"></div>
+    </div>
+    <div id="speakView">
     <div class="top">
       <label>Ik spreek<select id="from"></select></label>
       <button class="swap" id="swap" aria-label="Talen omwisselen">⇄</button>
       <label>Vertaal naar<select id="to"></select></label>
       <button class="mic" id="mic"><span class="dot"></span><span id="micTxt">Start</span></button>
+    </div>
+    <div class="sharebar">
+      <button id="bShare" class="sharebtn"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>Luisteraars laten meeluisteren</button>
+      <span class="pill" id="bPill" hidden></span>
+      <button id="bLink" hidden>Kopieer link</button>
+      <button id="bStop" hidden>Stop delen</button>
     </div>
     <div class="panes">
       <section class="pane src"><div class="ph"><span>Gesproken</span></div><div class="txt" id="srcTxt"></div></section>
@@ -403,6 +442,7 @@ input[type=text],input[type=password]{width:100%}
       <label><input type="checkbox" id="tSpeak"> Vertaling voorlezen</label>
       <label><input type="checkbox" id="big"> Grote letters</label>
       <span class="status" id="tStatus">Klaar</span>
+    </div>
     </div>
   </section>
 
@@ -795,7 +835,7 @@ function rLog(event,detail,ms){
 const ABC="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const newCode=()=>Array.from({length:6},()=>ABC[Math.floor(Math.random()*ABC.length)]).join("");
 function state(t,c=""){$("rState").className="pill "+c;$("rState").lastElementChild.textContent=t}
-const ERR={"verlopen":"Deze gesprekscode is verlopen. Start een nieuw gesprek.","niet-gevonden":"Code niet gevonden of verlopen. Controleer de code, of laat de ander een nieuwe code maken.","vol":"Er zitten al twee mensen in dit gesprek.","in-gebruik":"Deze code is al in gebruik.","geen-ruimte":"Het tussenstation is nog niet ingesteld voor Op afstand.","netwerk":"Geen verbinding met het tussenstation. Controleer je internet."};
+const ERR={"is-toespraak":"Dit is een code voor een toespraak. Ga naar 'Toespraak' en vul de code in bij 'Meeluisteren'.","verlopen":"Deze gesprekscode is verlopen. Start een nieuw gesprek.","niet-gevonden":"Code niet gevonden of verlopen. Controleer de code, of laat de ander een nieuwe code maken.","vol":"Er zitten al twee mensen in dit gesprek.","in-gebruik":"Deze code is al in gebruik.","geen-ruimte":"Het tussenstation is nog niet ingesteld voor Op afstand.","netwerk":"Geen verbinding met het tussenstation. Controleer je internet."};
 function wsUrl(){
   const base=($("ghUrl").value.trim()||WORKER_URL).replace(/\/+$/,"").replace(/^http/,"ws");
   return `${base}/room/${R.code}?role=${R.role}&id=${R.sid}`+(R.nieuw?`&nieuw=1&geldig=${R.geldig}`:"");
@@ -1045,6 +1085,7 @@ function finalTalk(text,conf){
   const f=from.value,t=to.value;
   tQueue=tQueue.then(async()=>{
     outLines[i]=await translate(text,f,t,{conf});renderTalk();
+    shareZin(text,f,t,outLines[i]);
     if(!tSpeak())return;
     const wasOn=running;if(wasOn){tPaused=true;killRec(tRec);tRec=null}
     sayStatus=tStatus;tStatus("Voorlezen…");await wait(300);await say(outLines[i],t);await wait(300);
@@ -1136,6 +1177,125 @@ $("consentYes").onclick=()=>consent(true);
 $("consentNo").onclick=()=>consent(false);
 $("consentYes").focus();
 
+/* ---------- TOESPRAAK DELEN: spreker + luisteraars via code ----------
+   De spreker vertaalt elke zin één keer per taal van de luisteraars en stuurt die via de gespreksruimte
+   naar iedereen. Luisteraars zien en horen de toespraak in hun eigen taal. */
+const B={ws:null,role:"",code:"",lang:"",tries:0,langs:{},fatal:null,leaving:false,nieuw:false,expires:0,spk:false,lines:[],seen:new Set(),sayQ:Promise.resolve(),waiting:0,lock:null};
+$("bLang").innerHTML=`<option value="" disabled${store.bLang?"":" selected"}>Kies je taal…</option>`+opts(store.bLang||"");
+const bTxt=t=>{$("bJoinStatus").textContent=t};
+function bLog(ev,detail){keepRecord({modus:"verbinding",spreker:B.role,van:B.lang,gesproken:ev,vertaling:detail||""});if(store.chk.ghAuto!==false)ghSend(true)}
+const BERR={"niet-gevonden":"Code niet gevonden of verlopen.","geen-toespraak":"Dit is een code voor een gesprek. Gebruik die bij 'Op afstand'.","vol":"Er luisteren al te veel mensen mee.","in-gebruik":"Deze code is al in gebruik.","geen-ruimte":"Het tussenstation is nog niet ingesteld.","netwerk":"Geen verbinding. Controleer je internet."};
+async function wakeOn(){try{if("wakeLock" in navigator&&!B.lock)B.lock=await navigator.wakeLock.request("screen");B.lock&&B.lock.addEventListener("release",()=>{B.lock=null})}catch(e){}}
+function wakeOff(){try{B.lock&&B.lock.release()}catch(e){}B.lock=null}
+function bUrl(){
+  const base=($("ghUrl").value.trim()||WORKER_URL).replace(/\/+$/,"").replace(/^http/,"ws");
+  return `${base}/room/${B.code}?role=${B.role}&id=${store.device}&lang=${code(B.lang)}`+(B.nieuw?"&nieuw=1&geldig=dag":"");
+}
+function bConnect(){
+  clearTimeout(B.retry);
+  let ws;try{ws=new WebSocket(bUrl())}catch(e){return bFail("netwerk")}
+  B.ws=ws;
+  ws.onmessage=ev=>{
+    let d;try{d=JSON.parse(ev.data)}catch(e){return}
+    if(d.t==="_sys"){
+      if(d.ev==="joined"){B.tries=0;B.nieuw=false;B.expires=d.expires;
+        if(B.role==="spreker"){B.spk=true;bPill();bLog("toespraak gedeeld",B.code)}
+        else lState(d.peers?"Live – de spreker is verbonden":"Wachten op de spreker…",d.peers?"ok":"");
+        $("lLost").hidden=true}
+      else if(d.ev==="luisteraars"){B.langs=d.talen||{};bPill()}
+      else if(d.ev==="peer-joined"&&B.role==="luisteraar")lState("Live – de spreker is verbonden","ok");
+      else if(d.ev==="peer-left"&&B.role==="luisteraar")lState("De spreker is even weg – wachten…","bad");
+      else if(d.ev==="error"){
+        if(d.reden==="in-gebruik"&&B.nieuw){B.code=newCode();return setTimeout(bConnect,100)}
+        bFail(d.reden)}
+      return}
+    if(B.role==="luisteraar"&&d.t==="zin")onZin(d);
+  };
+  ws.onclose=ev=>{
+    if(B.ws!==ws||B.leaving||B.fatal)return;
+    if(ev&&ev.code===4000&&ev.reason){if(ev.reason==="in-gebruik"&&B.nieuw){B.code=newCode();return setTimeout(bConnect,100)}return bFail(ev.reason)}
+    B.tries++;
+    if(B.tries>12){bLost();return}
+    if(B.role==="luisteraar")lState("Opnieuw verbinden…","");else bPill("Opnieuw verbinden…");
+    B.retry=setTimeout(bConnect,Math.min(1000*2**(B.tries-1),8000));
+  };
+}
+function bFail(reden){
+  B.fatal=reden;clearTimeout(B.retry);try{B.ws&&B.ws.close()}catch(e){}
+  bLog("mislukt",reden);
+  if(B.role==="luisteraar"){if(!$("listenView").hidden&&B.lines.length){bLost(BERR[reden])}else{bShowListen(false);bTxt(BERR[reden]||"Fout: "+reden)}}
+  else{B.spk=false;bPill();tStatus(BERR[reden]||"Fout: "+reden)}
+}
+function bLost(msg){
+  if(B.role==="luisteraar"){$("lLostTxt").textContent=msg||"De verbinding is verbroken.";$("lLost").hidden=false;lState("Niet verbonden","bad")}
+  else{B.spk=false;bPill();tStatus("Verbinding met luisteraars verbroken – tik op 'Luisteraars laten meeluisteren' om opnieuw te delen.")}
+}
+function bClose(){B.leaving=true;clearTimeout(B.retry);try{B.ws&&B.ws.close(1000,"klaar")}catch(e){}B.ws=null;B.spk=false;B.fatal=null;wakeOff()}
+/* --- spreker --- */
+function bPill(extra){
+  const on=B.spk||!!extra;
+  $("bPill").hidden=!on;$("bStop").hidden=!on;$("bLink").hidden=!on;$("bShare").hidden=on;
+  if(B.role==="spreker")$("bJoinBox").hidden=on;   // tijdens delen: meeluister-vak niet nodig
+  if(!on)return;
+  const t=Object.entries(B.langs),n=t.reduce((a,[,v])=>a+v,0);
+  $("bPill").textContent=extra||`Code ${B.code} · ${n} luisteraar${n===1?"":"s"}`+(n?" ("+t.map(([l,v])=>`${name(LANGS.find(x=>code(x[0])===l)?.[0]||l)} ${v}`).join(", ")+")":"");
+}
+$("bShare").onclick=()=>{
+  bClose();Object.assign(B,{role:"spreker",code:newCode(),lang:from.value,nieuw:true,tries:0,fatal:null,leaving:false,langs:{}});
+  bConnect();bPill("Code maken…");wakeOn();
+};
+$("bStop").onclick=()=>{bClose();bPill();tStatus("Delen gestopt")};
+$("bLink").onclick=()=>copy(location.origin+location.pathname+"#luister-"+B.code,tStatus);
+async function shareZin(text,f,t,first){
+  if(!B.spk||!B.ws||B.ws.readyState!==1)return;
+  const targets=[...new Set(Object.keys(B.langs))].filter(c=>c!==code(f));
+  const tr={};if(code(t)!==code(f))tr[code(t)]=first;
+  await Promise.all(targets.filter(c=>!(c in tr)).map(async c=>{const full=LANGS.find(x=>code(x[0])===c)?.[0]||c;tr[c]=await translate(text,f,full,{who:"toespraak"})}));
+  try{B.ws.send(JSON.stringify({t:"zin",id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),text,from:f,tr}))}catch(e){}
+}
+/* --- luisteraar --- */
+function lState(t,c=""){$("lState").className="pill "+c;$("lState").lastElementChild.textContent=t}
+function bShowListen(on){$("listenView").hidden=!on;$("speakView").hidden=on;$("bJoinBox").hidden=on;fitSoon()}
+function renderListen(){
+  const orig=$("lOrig").checked;
+  $("lLines").innerHTML=B.lines.map(l=>`<p>${esc(l.text)}${orig&&l.orig!==l.text?`<small>${esc(l.orig)}</small>`:""}</p>`).join("")||`<p class="empty" style="font-size:16px">Wacht tot de spreker begint. De toespraak verschijnt hier in het ${esc(name(B.lang))}.</p>`;
+  $("lLines").scrollTop=1e9;
+}
+async function onZin(d){
+  if(B.seen.has(d.id))return;B.seen.add(d.id);
+  const mine=code(B.lang);let text=d.tr&&d.tr[mine];
+  if(!text)text=code(d.from||"")===mine?d.text:await translate(String(d.text||""),String(d.from||"nl-NL"),B.lang,{who:"toespraak"});
+  B.lines.push({text:String(text),orig:String(d.text||"")});if(B.lines.length>300)B.lines.shift();
+  renderListen();lState("Live – de spreker is verbonden","ok");
+  if($("lSpeak").checked){
+    if(B.waiting>2)return;                      // achter? sla voorlezen over om bij te blijven
+    B.waiting++;B.sayQ=B.sayQ.then(()=>say(String(text),B.lang)).finally(()=>B.waiting--);
+  }
+}
+function bJoin(){
+  const c=$("bCode").value.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
+  if(c.length!==6)return bTxt("Vul de code van 6 tekens in.");
+  if(!$("bLang").value){$("bLang").classList.add("need");return bTxt("Kies eerst je taal.")}
+  $("bLang").classList.remove("need");store.bLang=$("bLang").value;save();
+  if(!store.device){store.device=Math.random().toString(36).slice(2,8);save()}
+  bClose();Object.assign(B,{role:"luisteraar",code:c,lang:$("bLang").value,nieuw:false,tries:0,fatal:null,leaving:false,lines:[],seen:new Set()});
+  $("lCodePill").textContent="Code "+c+" · "+name(B.lang);lState("Verbinden…");bTxt("");
+  bShowListen(true);renderListen();bConnect();bLog("meeluisteren gestart",c);wakeOn();
+  try{const u=new SpeechSynthesisUtterance(" ");u.volume=0;speechSynthesis.speak(u)}catch(e){}   // voorlezen vrijgeven (tik)
+}
+$("bJoin").onclick=bJoin;$("bCode").onkeydown=e=>{if(e.key==="Enter")bJoin()};
+const lQuit=()=>{bClose();hush();bShowListen(false);bTxt("Gestopt met meeluisteren.")};
+$("lStop").onclick=lQuit;$("lQuit").onclick=lQuit;
+$("lBack").onclick=()=>{$("lLost").hidden=true;B.fatal=null;B.leaving=false;B.tries=0;lState("Opnieuw verbinden…");bConnect()};
+persist("lSpeak",true);persist("lOrig",false,renderListen);
+document.addEventListener("visibilitychange",()=>{if(document.hidden||!B.role||B.leaving||B.fatal)return;
+  if(!B.ws||B.ws.readyState>1){B.tries=0;bConnect()}if(B.spk||B.role==="luisteraar")wakeOn()});
+setInterval(()=>{if(B.ws&&B.ws.readyState===1)try{B.ws.send("ping")}catch(e){}},25000);
+/* link met code: #luister-ABC123 opent meteen 'meeluisteren' */
+function hashJoin(){const m=location.hash.match(/^#luister-([A-Z0-9]{6})$/i);if(!m)return;
+  tab("talk");$("bCode").value=m[1].toUpperCase();bTxt("Kies je taal en tik op Meeluisteren.");$("bLang").focus()}
+window.addEventListener("hashchange",hashJoin);
+
 /* ---------- schermgrootte: gespreksvlakken precies passend maken ---------- */
 function fit(el,below){
   if(!el||!el.offsetParent)return;
@@ -1146,6 +1306,7 @@ function fit(el,below){
 function fitAll(){
   const card=window.innerWidth>=1100?36:0;   // computer: ruimte voor de onderrand van de kaart
   fit($("rChat").hidden?null:document.querySelector(".rhalves"),card);
+  if(!$("talk").hidden&&!$("listenView").hidden)fit($("lLines"),card);
   if(!$("conv").hidden){
     if(!$("facing").hidden)fit($("facing"),card);
     else fit($("log"),($("speakers").offsetHeight||0)+12+card);
@@ -1171,6 +1332,7 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("help").hidden)c
 /* ---------- start ---------- */
 renderPeople();renderTalk();
 tab(TABS[store.tab]?store.tab:"conv");
+hashJoin();
 }
 </script>
 </body>
