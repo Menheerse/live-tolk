@@ -468,13 +468,14 @@ input[type=text],input[type=password]{width:100%}
 <script>
 {
 /* ---------- gedeelde basis ---------- */
-const LANGS=[["nl-NL","Nederlands"],["en-GB","Engels"],["de-DE","Duits"],["fr-FR","Frans"],["es-ES","Spaans"],["it-IT","Italiaans"],["pt-PT","Portugees"],["pl-PL","Pools"],["ro-RO","Roemeens"],["bg-BG","Bulgaars"],["hu-HU","Hongaars"],["uk-UA","Oekraïens"],["ru-RU","Russisch"],["tr-TR","Turks"],["ar-SA","Arabisch"],["fa-IR","Perzisch"],["ti-ER","Tigrinya"],["so-SO","Somalisch"],["zh-CN","Chinees"],["hi-IN","Hindi"],["id-ID","Indonesisch"]];
+const LANGS=[["nl-NL","Nederlands","Nederlands"],["en-GB","Engels","English"],["de-DE","Duits","Deutsch"],["fr-FR","Frans","Français"],["es-ES","Spaans","Español"],["it-IT","Italiaans","Italiano"],["pt-PT","Portugees","Português"],["pl-PL","Pools","Polski"],["ro-RO","Roemeens","Română"],["bg-BG","Bulgaars","Български"],["hu-HU","Hongaars","Magyar"],["uk-UA","Oekraïens","Українська"],["ru-RU","Russisch","Русский"],["tr-TR","Turks","Türkçe"],["ar-SA","Arabisch","العربية"],["fa-IR","Perzisch","فارسی"],["ti-ER","Tigrinya","ትግርኛ"],["so-SO","Somalisch","Soomaali"],["zh-CN","Chinees","中文"],["hi-IN","Hindi","हिन्दी"],["id-ID","Indonesisch","Bahasa Indonesia"]];
 const COLORS=["#b8f5d0","#ffd98a","#a9d4ff","#f6b3c8"];
 const $=id=>document.getElementById(id);
 const code=v=>v.split("-")[0];
 const name=v=>(LANGS.find(l=>l[0]===v)||[v,v])[1];
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const opts=sel=>LANGS.map(([c,n])=>`<option value="${c}"${c===sel?" selected":""}>${n}</option>`).join("");
+/* keuzemenu: taal in eigen schrift, met de Nederlandse naam erachter (bijv. "Polski (Pools)") */
+const opts=sel=>LANGS.map(([c,n,nat])=>`<option value="${c}"${c===sel?" selected":""}>${nat&&nat!==n?`${nat} (${n})`:n}</option>`).join("");
 const statusOf=id=>t=>{$(id).textContent=t};
 const warn=t=>{$("warn").textContent=t;$("warn").style.display="block"};
 const scrollEnd=(...els)=>els.forEach(el=>el.scrollTop=1e9);
