@@ -306,7 +306,7 @@ input[type=text],input[type=password]{width:100%}
         <li>Vertel je gesprekspartner dat het gesprek wordt bewaard.</li>
         <li>Onderaan bij <i>Bewaarde teksten</i> kun je bewaren uitzetten en alles op dit toestel wissen.</li>
       </ul></details>
-    <p class="helpfoot">Live Tolk · B-IM Menheerse</p>
+    <p class="helpfoot">Live Tolk · B-IM Menheerse · versie <span translate="no" id="buildNr"></span></p>
   </div>
 </div>
 <div class="viewer" id="viewer" hidden><img id="viewerImg" alt="Foto groot"><span>Tik om te sluiten</span></div>
@@ -322,6 +322,7 @@ input[type=text],input[type=password]{width:100%}
   </div>
   <div class="modehead"><h2 id="modeTitle">Gesprek</h2><p id="modeSub"></p></div>
   <div class="warn" id="warn"></div>
+  <div class="browserwarn" id="updateWarn" hidden><p><strong>Er is een nieuwe versie van Live Tolk.</strong> Vernieuw de pagina om die te gebruiken.</p><button class="mic" id="updateBtn">Vernieuwen</button></div>
   <div class="browserwarn" id="browserWarn" hidden>
     <p><strong>Deze browser ondersteunt geen spraakherkenning.</strong> <span id="browserName"></span> Open Live Tolk in <strong id="goodBrowser">Google Chrome</strong>.</p>
     <a class="mic" id="openChrome" href="#">Openen in Chrome</a>
@@ -1020,7 +1021,7 @@ document.addEventListener("click",e=>{
 document.addEventListener("visibilitychange",()=>{
   if(document.hidden)return;
   if(R.code&&!R.fatal&&!R.leaving&&(!R.ws||R.ws.readyState>1)){R.tries=0;connectWS()}
-  if(R.on&&!R.speaking)setTimeout(()=>{if(R.on&&!R.speaking&&!document.hidden)startR()},700);   // microfoon weer aan na terugkomst
+  if(R.on&&!R.speaking){if(IOS){R.on=false;R.rec=null;renderR()}else setTimeout(()=>{if(R.on&&!R.speaking&&!document.hidden)startR()},700)}   // microfoon weer aan na terugkomst (niet op iPhone)
 });
 /* verbinding levend houden (sommige netwerken sluiten stille verbindingen) */
 setInterval(()=>{if(R.ws&&R.ws.readyState===1)try{R.ws.send("ping")}catch(e){}},25000);
@@ -1043,7 +1044,9 @@ function onData(d){
       if(!rSpeak())return;
       R.speaking=true;killRec(R.rec);R.rec=null;R.myLive="";renderR();
       sayStatus=rStatus;await wait(300);await say(e.tr,rLang());await wait(300);
-      R.speaking=false;if(R.on)startR();else renderR();
+      R.speaking=false;
+      if(R.on&&IOS){R.on=false;rStatus("Tik op de spreekknop om te antwoorden.");renderR()}   // iPhone: na voorlezen opnieuw tikken
+      else if(R.on)startR();else renderR();
     });
   }
   renderR();
@@ -1068,7 +1071,9 @@ function startR(){
   const rec=R.rec=makeRec(rLang(),true,{
     onFinal:(t,c)=>{const id=Date.now()+"-"+Math.random().toString(36).slice(2,6);R.mine.push({id,text:t,tr:"…"});send({t:"msg",id,text:t,lang:rLang(),conf:c})},
     onInterim:it=>{R.myLive=it;send({t:"live",text:it});renderR()},
-    onEnd:()=>{R.myLive="";renderR();setTimeout(()=>{if(R.on&&!R.speaking&&R.rec===rec&&!document.hidden)startR()},document.hidden?0:Date.now()-visibleAt<4000?800:150)},
+    onEnd:()=>{R.myLive="";
+      if(IOS&&R.on&&R.rec===rec&&!R.speaking){R.on=false;R.rec=null;rStatus("De microfoon is gestopt. Tik op de spreekknop om verder te praten.");renderR();return}
+      renderR();setTimeout(()=>{if(R.on&&!R.speaking&&R.rec===rec&&!document.hidden)startR()},document.hidden?0:Date.now()-visibleAt<4000?800:150)},
     onDenied:()=>rMic(false)
   });
   renderR();
@@ -1134,7 +1139,8 @@ function finalTalk(text,conf){
     if(!tSpeak())return;
     const wasOn=running;if(wasOn){tPaused=true;killRec(tRec);tRec=null}
     sayStatus=tStatus;tStatus("Voorlezen…");await wait(300);await say(outLines[i],t);await wait(300);
-    tPaused=false;if(wasOn&&running){startTalk()}
+    tPaused=false;
+    if(wasOn&&running){if(IOS){running=false;uiTalk();tStatus("Tik op Start om verder te gaan.")}else startTalk()}
   });
 }
 function startTalk(){
@@ -1455,6 +1461,16 @@ if(window.visualViewport)visualViewport.addEventListener("resize",fitSoon);
 new MutationObserver(fitSoon).observe(document.querySelector(".wrap"),{attributes:true,subtree:true,attributeFilter:["hidden"]});
 /* 'Meer instellingen' standaard dicht, zodat het gesprek zo veel mogelijk ruimte heeft */
 
+/* ---------- nieuwe versie? (browsers bewaren de pagina soms tot 10 minuten) ---------- */
+const BUILD="20261126-0908";
+async function checkUpdate(){
+  try{const t=await (await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})).text();
+    const m=t.match(/const BUILD="([^"]+)"/);if(m&&m[1]!==BUILD&&m[1]!=="__BUILD__")$("updateWarn").hidden=false}catch(e){}
+}
+$("updateBtn").onclick=()=>location.reload();
+setTimeout(checkUpdate,3000);setInterval(checkUpdate,120000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)checkUpdate()});
+
 /* ---------- help ---------- */
 function openHelp(){
   const want={conv:"conv",remote:"remote",talk:"talk"}[store.tab]||"start";
@@ -1462,7 +1478,7 @@ function openHelp(){
   $("help").hidden=false;$("helpClose").focus();store.helpSeen=true;save();
 }
 const closeHelp=()=>{$("help").hidden=true;$("helpBtn").focus()};
-$("helpBtn").onclick=openHelp;$("helpClose").onclick=closeHelp;
+$("helpBtn").onclick=openHelp;$("buildNr").textContent=BUILD;$("helpClose").onclick=closeHelp;
 $("help").addEventListener("click",e=>{if(e.target.id==="help")closeHelp()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("help").hidden)closeHelp()});
 
