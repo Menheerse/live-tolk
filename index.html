@@ -19,7 +19,10 @@
    PICTURE: het vertaalvlak / gesprekslog zelf
    COLOUR and TYPE: zwart/wit + mint, personen in eigen kleur; Space Grotesk + Inter
    LAYOUT: tabs, bediening, groot tekstvlak, sprekersknoppen onderaan */
-:root{color-scheme:light dark;--bg:light-dark(#ffffff,#0c0d0e);--ink:light-dark(#111,#f2f2f2);--mut:light-dark(#6b6f73,#9aa0a6);--line:light-dark(#e4e6e8,#26292c);--mint:#b8f5d0;--mintink:light-dark(#0c3a22,#b8f5d0);--field:light-dark(#b8f5d0,#11251a);--soft:light-dark(#f4f5f6,#16181a);--btn:light-dark(#111,#b8f5d0);--btnink:light-dark(#fff,#0c3a22)}
+:root{color-scheme:light dark;--mint:#b8f5d0;--bg:#ffffff;--ink:#111;--mut:#6b6f73;--line:#e4e6e8;--mintink:#0c3a22;--field:#b8f5d0;--soft:#f4f5f6;--btn:#111;--btnink:#fff;--deskbg:#f3f5f7}
+/* donkere kleuren via media query (de CSS-functie voor licht/donker kent Safari pas vanaf iOS 17.5) */
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0c0d0e;--ink:#f2f2f2;--mut:#9aa0a6;--line:#26292c;--mintink:#b8f5d0;--field:#11251a;--soft:#16181a;--btn:#b8f5d0;--btnink:#0c3a22;--deskbg:#0b0c0d}}
+:root[data-theme=dark]{--bg:#0c0d0e;--ink:#f2f2f2;--mut:#9aa0a6;--line:#26292c;--mintink:#b8f5d0;--field:#11251a;--soft:#16181a;--btn:#b8f5d0;--btnink:#0c3a22;--deskbg:#0b0c0d}
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
 *{box-sizing:border-box;min-width:0}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
@@ -185,7 +188,7 @@ input[type=text],input[type=password]{width:100%}
 /* ================= Computer (≥1100 px): balk bovenaan, gesprek eronder ================= */
 .tagline,.modehead{display:none}
 @media (min-width:1100px){
-  body{background:light-dark(#f3f5f7,#0b0c0d)}
+  body{background:var(--deskbg)}
   .wrap{max-width:none;margin:0;padding:0 0 28px}
   .wrap>*:not(.head){margin-left:auto;margin-right:auto;width:min(100% - 2*clamp(28px,3vw,48px),1500px)}
   /* logo's over de volle hoogte van de balk: links B-IM, rechts De Nijs, in het midden titel en standen */
@@ -474,8 +477,14 @@ input[type=text],input[type=password]{width:100%}
 </div>
 <script>
 /* Vangnet voor oude browsers (ES5): als de app-code niet start, toon uitleg i.p.v. een vastgelopen scherm. */
-var LT_ERR="";window.onerror=function(m){LT_ERR=LT_ERR||String(m);};
-window.addEventListener("load",function(){if(window.LT_OK)return;
+var LT_ERR="";window.onerror=function(m,u,l,c){LT_ERR=LT_ERR||(String(m)+" (regel "+l+":"+c+")");};
+window.addEventListener("load",function(){
+  if(window.LT_OK&&!window.LT_READY){ /* code liep vast tijdens opstarten: popup toch bruikbaar maken en fout tonen */
+    var y=document.getElementById("consentYes"),n=document.getElementById("consentNo"),m=document.getElementById("consent");
+    var hide=function(){if(m)m.hidden=true;};if(y)y.addEventListener("click",hide);if(n)n.addEventListener("click",hide);
+    var e=document.createElement("div");e.setAttribute("style","position:fixed;left:8px;right:8px;bottom:8px;z-index:9999;background:#fff3cd;color:#222;border:1px solid #d9a400;border-radius:10px;padding:8px 12px;font:13px/1.4 system-ui,sans-serif");
+    e.textContent="Opstartfout (maak a.u.b. een foto): "+(LT_ERR||"onbekend")+" \u00b7 "+navigator.userAgent;document.body.appendChild(e);return;}
+  if(window.LT_OK)return;
   var c=document.getElementById("consent");if(c)c.hidden=true;
   var v=(navigator.userAgent.match(/OS (\d+)_(\d+)/)||[]);
   var d=document.createElement("div");
@@ -1560,7 +1569,7 @@ new MutationObserver(fitSoon).observe(document.querySelector(".wrap"),{attribute
 /* 'Meer instellingen' standaard dicht, zodat het gesprek zo veel mogelijk ruimte heeft */
 
 /* ---------- nieuwe versie? (browsers bewaren de pagina soms tot 10 minuten) ---------- */
-const BUILD="20261127-1122";
+const BUILD="20261127-1126";
 async function checkUpdate(){
   try{const t=await (await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})).text();
     const m=t.match(/const BUILD="([^"]+)"/);if(m&&m[1]!==BUILD&&m[1]!=="__BUILD__")$("updateWarn").hidden=false}catch(e){}
@@ -1586,6 +1595,7 @@ tab(TABS[store.tab]?store.tab:"conv");
 hashJoin();
 setUiLang(store.uiLang||(navigator.languages||[navigator.language||"nl"]).map(l=>code(String(l).toLowerCase())).find(c=>UI_LANGS.includes(c))||"nl");
 }
+window.LT_READY=1;
 </script>
 </body>
 </html>
