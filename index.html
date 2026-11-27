@@ -473,6 +473,18 @@ input[type=text],input[type=password]{width:100%}
   </details>
 </div>
 <script>
+/* Vangnet voor oude browsers (ES5): als de app-code niet start, toon uitleg i.p.v. een vastgelopen scherm. */
+var LT_ERR="";window.onerror=function(m){LT_ERR=LT_ERR||String(m);};
+window.addEventListener("load",function(){if(window.LT_OK)return;
+  var c=document.getElementById("consent");if(c)c.hidden=true;
+  var v=(navigator.userAgent.match(/OS (\d+)_(\d+)/)||[]);
+  var d=document.createElement("div");
+  d.setAttribute("style","position:fixed;left:12px;right:12px;top:12px;z-index:9999;background:#fff3cd;color:#222;border:2px solid #d9a400;border-radius:12px;padding:16px;font:16px/1.4 system-ui,sans-serif");
+  d.innerHTML="<b>Live Tolk kan niet starten op dit apparaat.</b><br>Deze browser is te oud"+(v[1]?" (iOS/iPadOS "+v[1]+"."+v[2]+")":"")+". Werk het apparaat bij via Instellingen \u203a Algemeen \u203a Software-update (minimaal iOS 13), of gebruik een ander apparaat.<br><small>Technisch: "+(LT_ERR||"onbekende fout").replace(/</g,"&lt;")+"</small>";
+  document.body.appendChild(d);});
+</script>
+<script>
+window.LT_OK=1; /* code is geparsed: oude-browser-vangnet niet nodig */
 {
 /* ---------- gedeelde basis ---------- */
 const LANGS=[["nl-NL","Nederlands","Nederlands"],["en-GB","Engels","English"],["de-DE","Duits","Deutsch"],["fr-FR","Frans","Français"],["es-ES","Spaans","Español"],["it-IT","Italiaans","Italiano"],["pt-PT","Portugees","Português"],["pl-PL","Pools","Polski"],["ro-RO","Roemeens","Română"],["bg-BG","Bulgaars","Български"],["hu-HU","Hongaars","Magyar"],["uk-UA","Oekraïens","Українська"],["ru-RU","Russisch","Русский"],["tr-TR","Turks","Türkçe"],["ar-SA","Arabisch","العربية"],["fa-IR","Perzisch","فارسی"],["ti-ER","Tigrinya","ትግርኛ"],["so-SO","Somalisch","Soomaali"],["zh-CN","Chinees","中文"],["hi-IN","Hindi","हिन्दी"],["id-ID","Indonesisch","Bahasa Indonesia"]];
@@ -759,8 +771,8 @@ async function translate(t,from,to,meta={}){
   if(out===null){try{out=await ONLINE[0](t,a,b);engine="google"}catch(e){}}
   if(out===null){const l=await getLocal(a,b);if(l){try{out=await l.translate(t);engine="chrome"}catch(e){}}}
   if(out===null){try{out=await ONLINE[1](t,a,b);engine="mymemory"}catch(e){}}
-  keepRecord({modus:store.tab||"conv",van:from,naar:to,gesproken:t,vertaling:out??"",vertaaldienst:engine,herkenning:meta.conf,ms:Math.round(performance.now()-t0),spreker:meta.who||""});
-  return out??"⚠ Vertalen mislukt (geen internet?)";
+  keepRecord({modus:store.tab||"conv",van:from,naar:to,gesproken:t,vertaling:out==null?"":out,vertaaldienst:engine,herkenning:meta.conf,ms:Math.round(performance.now()-t0),spreker:meta.who||""});
+  return out!=null?out:"⚠ Vertalen mislukt (geen internet?)";
 }
 
 /* ---------- teksten bewaren (alleen op dit toestel) ---------- */
@@ -857,7 +869,7 @@ const label=i=>`Persoon ${i+1} · ${name(people[i].lang)}`;
 $("pause").value=String(store.pause||2);
 $("pause").onchange=()=>{store.pause=+$("pause").value;save()};
 const pauseMs=()=>(store.pause||2)*1000;
-const textFor=(e,lang)=>code(e.lang)===code(lang)?e.text:(e.tr[code(lang)]??"…");
+const textFor=(e,lang)=>code(e.lang)===code(lang)?e.text:(e.tr[code(lang)]!=null?e.tr[code(lang)]:"…");
 
 function renderPeople(){
   $("people").innerHTML=people.map((p,i)=>`<div class="person" style="--c:${COLORS[i]}"><label>Persoon ${i+1}<select data-i="${i}">${opts(p.lang)}</select></label>${people.length>2?`<button class="x" data-x="${i}" aria-label="Verwijder persoon ${i+1}">×</button>`:""}</div>`).join("");
@@ -891,7 +903,7 @@ function renderConv(){
     const langs=[...new Set(people.map(p=>code(p.lang)))];
     $("log").innerHTML=log.map(e=>{
       const others=langs.filter(c=>c!==code(e.lang));
-      return `<div class="msg${e.p%2?" r":""}" style="--c:${COLORS[e.p]}"><div class="who"><span>${esc(e.who)}</span><span>${e.time}</span></div><p class="orig" translate="no">${esc(e.text)}</p>${others.map(c=>`<p class="tr" translate="no">${others.length>1?`<small>${c.toUpperCase()}</small>`:""}${esc(e.tr[c]??"…")}</p>`).join("")}</div>`;
+      return `<div class="msg${e.p%2?" r":""}" style="--c:${COLORS[e.p]}"><div class="who"><span>${esc(e.who)}</span><span>${e.time}</span></div><p class="orig" translate="no">${esc(e.text)}</p>${others.map(c=>`<p class="tr" translate="no">${others.length>1?`<small>${c.toUpperCase()}</small>`:""}${esc(e.tr[c]!=null?e.tr[c]:"…")}</p>`).join("")}</div>`;
     }).join("")+(liveText?`<div class="msg live${active%2?" r":""}" style="--c:${COLORS[active]}">${esc(liveText)}</div>`:"")
       ||emptyHTML("Tik op je eigen knop en begin te praten.<br>Iedereen ziet de vertaling in zijn eigen taal.");
     scrollEnd($("log"));
@@ -958,7 +970,7 @@ rCheck();renderLast();
    gesproken = gebeurtenis, vertaling = reden/details, ms = tijd sinds start poging of duur gesprek */
 function rLog(event,detail,ms){
   keepRecord({modus:"verbinding",spreker:R.role||"",van:rLang(),naar:R.other?R.other.lang:"",gesproken:event,vertaling:detail||"",
-    ms:ms??(R.t0?Math.round(performance.now()-R.t0):undefined)});
+    ms:ms!=null?ms:(R.t0?Math.round(performance.now()-R.t0):undefined)});
   if(store.chk.ghAuto!==false)ghSend(true);
 }
 /* Verbinding via ons tussenstation (Cloudflare Worker + Durable Object 'gespreksruimte').
@@ -1256,7 +1268,7 @@ persist("keepOn",true);
 keepSummary();
 $("keepCsv").onclick=()=>{
   if(!kept.length)return keepStatus("Nog niets bewaard");
-  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const q=v=>`"${String(v==null?"":v).replace(/"/g,'""')}"`;
   const csv="\ufeff"+[KEEP_COLS.join(";"),...kept.map(r=>KEEP_COLS.map(c=>q(r[c])).join(";"))].join("\r\n");
   download(`live-tolk-${stamp()}.csv`,csv,"text/csv;charset=utf-8");keepStatus(`${kept.length} regels geëxporteerd`);
 };
@@ -1375,7 +1387,7 @@ function bPill(extra){
   if(B.role==="spreker")$("bJoinBox").hidden=on;   // tijdens delen: meeluister-vak niet nodig
   if(!on)return;
   const t=Object.entries(B.langs),n=t.reduce((a,[,v])=>a+v,0);
-  $("bPill").textContent=extra||`Code ${B.code} · ${n} luisteraar${n===1?"":"s"}`+(n?" ("+t.map(([l,v])=>`${name(LANGS.find(x=>code(x[0])===l)?.[0]||l)} ${v}`).join(", ")+")":"");
+  $("bPill").textContent=extra||`Code ${B.code} · ${n} luisteraar${n===1?"":"s"}`+(n?" ("+t.map(([l,v])=>`${name((LANGS.find(x=>code(x[0])===l)||[l])[0])} ${v}`).join(", ")+")":"");
 }
 $("bShare").onclick=()=>{
   bClose();Object.assign(B,{role:"spreker",code:newCode(),lang:from.value,nieuw:true,tries:0,fatal:null,leaving:false,langs:{}});
@@ -1387,7 +1399,7 @@ async function shareZin(text,f,t,first){
   if(!B.spk||!B.ws||B.ws.readyState!==1)return;
   const targets=[...new Set(Object.keys(B.langs))].filter(c=>c!==code(f));
   const tr={};if(code(t)!==code(f))tr[code(t)]=first;
-  await Promise.all(targets.filter(c=>!(c in tr)).map(async c=>{const full=LANGS.find(x=>code(x[0])===c)?.[0]||c;tr[c]=await translate(text,f,full,{who:"toespraak"})}));
+  await Promise.all(targets.filter(c=>!(c in tr)).map(async c=>{const full=(LANGS.find(x=>code(x[0])===c)||[c])[0];tr[c]=await translate(text,f,full,{who:"toespraak"})}));
   try{B.ws.send(JSON.stringify({t:"zin",id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),text,from:f,tr}))}catch(e){}
 }
 /* --- luisteraar --- */
@@ -1443,7 +1455,7 @@ const UI_ATTRS=["placeholder","title","aria-label","alt"];
 const UI_LANGS=LANGS.map(l=>code(l[0]));
 const hasWords=t=>/[A-Za-zÀ-ÿ]{2,}/.test(t);
 function uiTmpl(t){const v=[];const k=t.replace(/\b(?=[A-Z0-9]*\d)[A-Z0-9]{6}\b|\d+(?:[.,:]\d+)*/g,m=>{v.push(m);return "{"+(v.length-1)+"}"});return [k,v]}
-const uiFill=(k,v)=>k.replace(/\{(\d+)\}/g,(m,i)=>v[+i]??m);
+const uiFill=(k,v)=>k.replace(/\{(\d+)\}/g,(m,i)=>v[+i]!=null?v[+i]:m);
 function uiTr(s){
   if(UI.lang==="nl"||!hasWords(s))return s;
   const lead=s.match(/^\s*/)[0],trail=s.match(/\s*$/)[0],[k,v]=uiTmpl(s.trim());
@@ -1548,7 +1560,7 @@ new MutationObserver(fitSoon).observe(document.querySelector(".wrap"),{attribute
 /* 'Meer instellingen' standaard dicht, zodat het gesprek zo veel mogelijk ruimte heeft */
 
 /* ---------- nieuwe versie? (browsers bewaren de pagina soms tot 10 minuten) ---------- */
-const BUILD="20261126-0927";
+const BUILD="20261127-1122";
 async function checkUpdate(){
   try{const t=await (await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})).text();
     const m=t.match(/const BUILD="([^"]+)"/);if(m&&m[1]!==BUILD&&m[1]!=="__BUILD__")$("updateWarn").hidden=false}catch(e){}
