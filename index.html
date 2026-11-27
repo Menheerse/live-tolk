@@ -494,6 +494,7 @@ window.addEventListener("load",function(){
 </script>
 <script>
 window.LT_OK=1; /* code is geparsed: oude-browser-vangnet niet nodig */
+(function(){ /* alles in één functie: Safari 16 vond sommige globale constanten niet terug (TTS) */
 {
 /* ---------- gedeelde basis ---------- */
 const LANGS=[["nl-NL","Nederlands","Nederlands"],["en-GB","Engels","English"],["de-DE","Duits","Deutsch"],["fr-FR","Frans","Français"],["es-ES","Spaans","Español"],["it-IT","Italiaans","Italiano"],["pt-PT","Portugees","Português"],["pl-PL","Pools","Polski"],["ro-RO","Roemeens","Română"],["bg-BG","Bulgaars","Български"],["hu-HU","Hongaars","Magyar"],["uk-UA","Oekraïens","Українська"],["ru-RU","Russisch","Русский"],["tr-TR","Turks","Türkçe"],["ar-SA","Arabisch","العربية"],["fa-IR","Perzisch","فارسی"],["ti-ER","Tigrinya","ትግርኛ"],["so-SO","Somalisch","Soomaali"],["zh-CN","Chinees","中文"],["hi-IN","Hindi","हिन्दी"],["id-ID","Indonesisch","Bahasa Indonesia"]];
@@ -810,7 +811,7 @@ const stamp=()=>new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const TTS="speechSynthesis" in window;
 let voices=[];
-function loadVoices(){if(TTS)voices=speechSynthesis.getVoices()}
+function loadVoices(){if(window.speechSynthesis)voices=speechSynthesis.getVoices()||[]}
 if(TTS){loadVoices();speechSynthesis.addEventListener("voiceschanged",loadVoices)}
 async function voiceFor(lang){
   for(let i=0;i<10&&!voices.length;i++){await wait(100);loadVoices()}
@@ -1569,7 +1570,7 @@ new MutationObserver(fitSoon).observe(document.querySelector(".wrap"),{attribute
 /* 'Meer instellingen' standaard dicht, zodat het gesprek zo veel mogelijk ruimte heeft */
 
 /* ---------- nieuwe versie? (browsers bewaren de pagina soms tot 10 minuten) ---------- */
-const BUILD="20261127-1126";
+const BUILD="20261127-1145";
 async function checkUpdate(){
   try{const t=await (await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})).text();
     const m=t.match(/const BUILD="([^"]+)"/);if(m&&m[1]!==BUILD&&m[1]!=="__BUILD__")$("updateWarn").hidden=false}catch(e){}
@@ -1596,6 +1597,7 @@ hashJoin();
 setUiLang(store.uiLang||(navigator.languages||[navigator.language||"nl"]).map(l=>code(String(l).toLowerCase())).find(c=>UI_LANGS.includes(c))||"nl");
 }
 window.LT_READY=1;
+})();
 </script>
 </body>
 </html>
