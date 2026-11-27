@@ -626,8 +626,12 @@ function wavBlob(pcm){
   return new Blob([b],{type:"audio/wav"});
 }
 async function transcribe(pcm,lang){
+  try{return await transcribeOnce(pcm,lang,15000)}
+  catch(e){return await transcribeOnce(pcm,lang,20000)}          // één keer opnieuw bij een trage of mislukte server
+}
+async function transcribeOnce(pcm,lang,maxMs){
   const base=($("ghUrl").value.trim()||WORKER_URL).replace(/\/+$/,"");
-  const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),20000);
+  const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),maxMs);
   try{const r=await fetch(`${base}/stt?lang=${code(lang)}`,{method:"POST",headers:{"Content-Type":"audio/wav"},body:wavBlob(pcm),signal:ctl.signal});
     if(!r.ok)throw new Error("stt "+r.status);return (await r.json()).text||""}finally{clearTimeout(tm)}
 }
@@ -1603,7 +1607,7 @@ new MutationObserver(fitSoon).observe(document.querySelector(".wrap"),{attribute
 /* 'Meer instellingen' standaard dicht, zodat het gesprek zo veel mogelijk ruimte heeft */
 
 /* ---------- nieuwe versie? (browsers bewaren de pagina soms tot 10 minuten) ---------- */
-const BUILD="20261127-1233";
+const BUILD="20261127-1247";
 async function checkUpdate(){
   try{const t=await (await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})).text();
     const m=t.match(/const BUILD="([^"]+)"/);if(m&&m[1]!==BUILD&&m[1]!=="__BUILD__")$("updateWarn").hidden=false}catch(e){}
